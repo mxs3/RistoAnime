@@ -72,52 +72,29 @@ function extractEpisodes(html) {
 }
 
 async function extractStreamUrl(html) {
-    if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
+    if (!_0xCheck()) return JSON.stringify({ streams: [], subtitles: null });
 
-    const supportedServers = ['mp4upload', 'yourupload', 'uqload'];
-    const matches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
+    const multiStreams = { streams: [], subtitles: null };
 
-    for (const match of matches) {
-        const embedUrl = match[1].trim();
-        const server = supportedServers.find(s => embedUrl.includes(s));
-        if (!server) continue;
+    const matches = [...html.matchAll(/<iframe[^>]+src=["'](?:https?:)?\/\/sendvid\.com\/embed\/([^"']+)["'][^>]*>/gi)];
 
-        try {
-            let streamUrl = '';
-            if (server === 'mp4upload') {
-                const htmlText = await (await fetchv2(embedUrl, {
-                    "Referer": "https://mp4upload.com/",
-                    "User-Agent": "Mozilla/5.0",
-                    "Accept": "text/html"
-                })).text();
-                streamUrl = extractMp4Script(htmlText);
-            } else if (server === 'yourupload') {
-                const htmlText = await (await fetchv2(embedUrl, {
-                    "Referer": "https://www.yourupload.com/",
-                    "User-Agent": "Mozilla/5.0",
-                    "Accept": "text/html"
-                })).text();
-                const match = htmlText.match(/file:\s*['"]([^'"]+\.mp4)['"]/);
-                streamUrl = match?.[1] || '';
-            } else if (server === 'uqload') {
-                const htmlText = await (await fetchv2(embedUrl, {
-                    "Referer": embedUrl,
-                    "Origin": "https://uqload.net",
-                    "User-Agent": "Mozilla/5.0",
-                    "Accept": "text/html"
-                })).text();
-                const match = htmlText.match(/sources:\s*\[\s*"([^"]+\.mp4)"\s*\]/);
-                streamUrl = match?.[1] || '';
-            }
+    if (!matches.length) return JSON.stringify(multiStreams);
 
-            if (streamUrl) return streamUrl;
+    const lastId = matches[matches.length - 1][1];
+    const embedUrl = `https://sendvid.com/embed/${lastId}`;
 
-        } catch (err) {
-            continue;
-        }
-    }
+    multiStreams.streams.push({
+        title: "SENDVID",
+        streamUrl: embedUrl,
+        headers: {
+            "Referer": "https://sendvid.com/",
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        },
+        subtitles: null
+    });
 
-    return 'https://files.catbox.moe/avolvc.mp4';
+    return JSON.stringify(multiStreams);
 }
 
 function decodeHTMLEntities(text) {
