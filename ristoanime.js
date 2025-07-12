@@ -72,27 +72,33 @@ function extractEpisodes(html) {
 }
 
 async function extractStreamUrl(html) {
-    if (!_0xCheck()) return [];
+    if (!_0xCheck()) return {
+        streams: [],
+        subtitles: null
+    };
 
-    const supportedServers = ['yourupload', 'uqload', 'mp4upload'];
+    const supportedServers = ['mp4upload', 'yourupload', 'uqload', 'vk'];
     const matches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
 
-    const streams = [];
+    const multiStreams = {
+        streams: [],
+        subtitles: null
+    };
 
     for (const match of matches) {
         const embedUrl = match[1].trim();
         const server = supportedServers.find(s => embedUrl.includes(s));
-        if (server && !streams.some(s => s.name === server.toUpperCase())) {
-            streams.push({
+        if (server && !multiStreams.streams.some(s => s.name === server.toUpperCase())) {
+            multiStreams.streams.push({
                 name: server.toUpperCase(),
-                url: embedUrl,
-                type: "embed"
+                type: "embed",
+                url: embedUrl
             });
-            if (streams.length >= 3) break;
+            if (multiStreams.streams.length >= 4) break;
         }
     }
 
-    return streams;
+    return multiStreams;
 }
 
 function decodeHTMLEntities(text) {
