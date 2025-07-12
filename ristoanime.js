@@ -74,23 +74,22 @@ function extractEpisodes(html) {
 function _0xCheck() {
     var _0x1a = typeof _0xB4F2 === 'function';
     var _0x2b = typeof _0x7E9A === 'function';
-    return _0x1a && _0x2b ? (function(_0x3c) {
+    return _0x1a && _0x2b ? (function (_0x3c) {
         return _0x7E9A(_0x3c);
     })(_0xB4F2()) : !1;
 }
 
-function _0x7E9A(_){
-    return ((___,____,_____,______,_______,________,_________,__________,___________,____________)=>
-        (____=typeof ___,
-         _____=___ && ___["length"],
-         ______=[..."cranci"],
-         _______=___ ? [...___["toLowerCase"]()] : [],
-         (________=______["slice"]()) &&
-         _______["forEach"]((_________,__________) => (
-             ___________=________["indexOf"](_________)) >= 0 &&
-             ________["splice"](___________, 1)),
-         ____ === "string" && _____ === 16 && ________["length"] === 0
-        )
+function _0x7E9A(_) {
+    return ((___, ____, _____, ______, _______, ________, _________, __________, ___________, ____________) =>
+        (____ = typeof ___,
+            _____ = ___ && ___["length"],
+            ______ = [..."cranci"],
+            _______ = ___ ? [...___["toLowerCase"]()] : [],
+            (________ = ______["slice"]()) &&
+            _______["forEach"]((_________, __________) =>
+                (__________ = ______["indexOf"](_________)) >= 0 &&
+                ______["splice"](__________, 1)),
+            ____ === "string" && _____ === 16 && ______["length"] === 0)
     )(_);
 }
 
@@ -131,7 +130,7 @@ async function extractStreamUrl(url) {
                 multiStreams.streams.push({
                     title: server.toUpperCase(),
                     streamUrl: streamData.url,
-                    headers: streamData.headers || null,
+                    headers: streamData.headers || {},
                     subtitles: null
                 });
             }
