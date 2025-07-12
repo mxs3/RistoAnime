@@ -72,25 +72,27 @@ function extractEpisodes(html) {
 }
 
 async function extractStreamUrl(html) {
-    if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
+    if (!_0xCheck()) return [];
 
-    const serverMatch = html.match(/<li[^>]+data-watch="([^"]+mp4upload\.com[^"]+)"/);
-    const embedUrl = serverMatch ? serverMatch[1].trim() : 'N/A';
+    const supportedServers = ['yourupload', 'uqload', 'mp4upload'];
+    const matches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
 
-    let streamUrl = "";
+    const streams = [];
 
-    if (embedUrl !== 'N/A') {
-        const response = await soraFetch(embedUrl);
-        const fetchedHtml = await response.text();
-        
-        const streamMatch = fetchedHtml.match(/player\.src\(\{\s*type:\s*["']video\/mp4["'],\s*src:\s*["']([^"']+)["']\s*\}\)/i);
-        if (streamMatch) {
-            streamUrl = streamMatch[1].trim();
+    for (const match of matches) {
+        const embedUrl = match[1].trim();
+        const server = supportedServers.find(s => embedUrl.includes(s));
+        if (server && !streams.some(s => s.name === server.toUpperCase())) {
+            streams.push({
+                name: server.toUpperCase(),
+                url: embedUrl,
+                type: "embed"
+            });
+            if (streams.length >= 3) break;
         }
     }
 
-    console.log(streamUrl);
-    return streamUrl;
+    return streams;
 }
 
 function decodeHTMLEntities(text) {
