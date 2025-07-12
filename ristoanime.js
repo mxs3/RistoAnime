@@ -92,6 +92,7 @@ async function extractStreamUrl(url) {
         for (const match of matches) {
             const embedUrl = match[1].trim();
             const server = servers.find(s => embedUrl.includes(s));
+            console.log(`Found embed: ${embedUrl} - Server: ${server}`);
             if (!server) continue;
 
             try {
@@ -112,6 +113,9 @@ async function extractStreamUrl(url) {
                         headers: streamData.headers || null,
                         subtitles: null
                     });
+                    console.log(`✅ ${server} success: ${streamData.url}`);
+                } else {
+                    console.log(`❌ ${server} failed: no stream URL`);
                 }
 
                 if (multiStreams.streams.length >= 3) break;
@@ -121,6 +125,7 @@ async function extractStreamUrl(url) {
             }
         }
 
+        console.log(`Final streams: ${multiStreams.streams.length}`);
         return multiStreams;
 
     } catch (error) {
