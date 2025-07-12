@@ -58,9 +58,10 @@ function extractEpisodes(html) {
 
 // 📺 روابط الستريم
 async function extractStreamUrl(url) {
-    if (!_0xCheck()) return { streams: [], subtitles: null };
+    if (!_0xCheck()) return JSON.stringify({ streams: [], subtitles: null });
 
     const multiStreams = { streams: [], subtitles: null };
+
     try {
         const response = await fetchv2(url);
         const html = await response.text();
@@ -94,9 +95,10 @@ async function extractStreamUrl(url) {
             if (multiStreams.streams.length >= 3) break;
         }
 
-        return multiStreams;
+        return JSON.stringify(multiStreams);
+
     } catch (err) {
-        return { streams: [], subtitles: null };
+        return JSON.stringify({ streams: [], subtitles: null });
     }
 }
 
