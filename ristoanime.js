@@ -86,13 +86,12 @@ async function extractStreamUrl(url) {
         const res = await fetchv2(url);
         const html = await res.text();
 
-        const servers = ['yourupload', 'uqload', 'mp4upload'];
+        const supportedServers = ['yourupload', 'uqload', 'mp4upload'];
         const matches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
 
         for (const match of matches) {
             const embedUrl = match[1].trim();
-            const server = servers.find(s => embedUrl.includes(s));
-            console.log(`Found embed: ${embedUrl} - Server: ${server}`);
+            const server = supportedServers.find(s => embedUrl.includes(s));
             if (!server) continue;
 
             try {
@@ -113,9 +112,6 @@ async function extractStreamUrl(url) {
                         headers: streamData.headers || null,
                         subtitles: null
                     });
-                    console.log(`✅ ${server} success: ${streamData.url}`);
-                } else {
-                    console.log(`❌ ${server} failed: no stream URL`);
                 }
 
                 if (multiStreams.streams.length >= 3) break;
@@ -125,7 +121,6 @@ async function extractStreamUrl(url) {
             }
         }
 
-        console.log(`Final streams: ${multiStreams.streams.length}`);
         return multiStreams;
 
     } catch (error) {
