@@ -71,34 +71,65 @@ function extractEpisodes(html) {
     return episodes;
 }
 
-async function extractStreamUrl(html) {
+async function extractStreamUrl(url) {
     if (!_0xCheck()) return {
         streams: [],
         subtitles: null
     };
-
-    const supportedServers = ['mp4upload', 'yourupload', 'uqload', 'vk'];
-    const matches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
 
     const multiStreams = {
         streams: [],
         subtitles: null
     };
 
-    for (const match of matches) {
-        const embedUrl = match[1].trim();
-        const server = supportedServers.find(s => embedUrl.includes(s));
-        if (server && !multiStreams.streams.some(s => s.name === server.toUpperCase())) {
-            multiStreams.streams.push({
-                name: server.toUpperCase(),
-                type: "embed",
-                url: embedUrl
-            });
-            if (multiStreams.streams.length >= 4) break;
-        }
-    }
+    try {
+        const res = await fetchv2(url);
+        const html = await res.text();
 
-    return multiStreams;
+        const servers = ['yourupload', 'uqload', 'mp4upload'];
+        const matches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
+
+        for (const match of matches) {
+            const embedUrl = match[1].trim();
+            const server = servers.find(s => embedUrl.includes(s));
+            if (!server) continue;
+
+            try {
+                let streamData = null;
+
+                if (server === 'mp4upload') {
+                    streamData = await mp4Extractor(embedUrl);
+                } else if (server === 'yourupload') {
+                    streamData = await youruploadExtractor(embedUrl);
+                } else if (server === 'uqload') {
+                    streamData = await uqloadExtractor(embedUrl);
+                }
+
+                if (streamData?.url) {
+                    multiStreams.streams.push({
+                        title: server.toUpperCase(),
+                        streamUrl: streamData.url,
+                        headers: streamData.headers || null,
+                        subtitles: null
+                    });
+                }
+
+                if (multiStreams.streams.length >= 3) break;
+
+            } catch (extractorError) {
+                console.error(`Extractor error for ${server}:`, extractorError);
+            }
+        }
+
+        return multiStreams;
+
+    } catch (error) {
+        console.error("Error in extractStreamUrl:", error);
+        return {
+            streams: [],
+            subtitles: null
+        };
+    }
 }
 
 function decodeHTMLEntities(text) {
