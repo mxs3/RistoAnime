@@ -71,26 +71,110 @@ function extractEpisodes(html) {
     return episodes;
 }
 
-async function extractStreamUrl(html) {
-    if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
+async function extractStreamUrl(url) {
+    if (!_0xCheck()) return JSON.stringify({ streams: [], subtitles: null });
 
-    const serverMatch = html.match(/<li[^>]+data-watch="([^"]+mp4upload\.com[^"]+)"/);
-    const embedUrl = serverMatch ? serverMatch[1].trim() : 'N/A';
+    const multiStreams = { streams: [], subtitles: null };
 
-    let streamUrl = "";
+    try {
+        const response = await fetchv2(url);
+        const html = await response.text();
 
-    if (embedUrl !== 'N/A') {
-        const response = await soraFetch(embedUrl);
-        const fetchedHtml = await response.text();
-        
-        const streamMatch = fetchedHtml.match(/player\.src\(\{\s*type:\s*["']video\/mp4["'],\s*src:\s*["']([^"']+)["']\s*\}\)/i);
-        if (streamMatch) {
-            streamUrl = streamMatch[1].trim();
+        const supportedServers = ['mp4upload', 'yourupload', 'uqload'];
+        const matches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
+
+        for (const match of matches) {
+            const embedUrl = match[1].trim();
+            const server = supportedServers.find(s => embedUrl.includes(s));
+            if (!server) continue;
+
+            let streamData = null;
+            if (server === 'mp4upload') {
+                streamData = await mp4Extractor(embedUrl);
+            } else if (server === 'yourupload') {
+                streamData = await youruploadExtractor(embedUrl);
+            } else if (server === 'uqload') {
+                streamData = await uqloadExtractor(embedUrl);
+            }
+
+            if (streamData?.url) {
+                multiStreams.streams.push({
+                    title: server.toUpperCase(),
+                    streamUrl: streamData.url,
+                    headers: streamData.headers,
+                    subtitles: null
+                });
+            }
+
+            if (multiStreams.streams.length >= 3) break;
         }
-    }
 
-    console.log(streamUrl);
-    return streamUrl;
+        return JSON.stringify(multiStreams);
+    } catch (err) {
+        return JSON.stringify({ streams: [], subtitles: null });
+    }
+}
+
+async function mp4Extractor(url) {
+    const headers = {
+        "Referer": "https://mp4upload.com/",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    };
+    const response = await fetchv2(url, headers);
+    const htmlText = await response.text();
+    const streamUrl = extractMp4Script(htmlText);
+    return {
+        url: streamUrl,
+        headers: headers
+    };
+}
+
+async function youruploadExtractor(embedUrl) {
+    const headers = {
+        "Referer": "https://www.yourupload.com/",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    };
+    const response = await fetchv2(embedUrl, headers);
+    const html = await response.text();
+    const match = html.match(/file:\s*['"]([^'"]+\.mp4)['"]/);
+    return {
+        url: match?.[1] || null,
+        headers: headers
+    };
+}
+
+async function uqloadExtractor(embedUrl) {
+    const headers = {
+        "Referer": embedUrl,
+        "Origin": "https://uqload.net",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    };
+    const response = await fetchv2(embedUrl, headers);
+    const htmlText = await response.text();
+    const match = htmlText.match(/sources:\s*\[\s*"([^"]+\.mp4)"\s*\]/);
+    return {
+        url: match ? match[1] : null,
+        headers: headers
+    };
+}
+
+function extractMp4Script(htmlText) {
+    const scripts = extractScriptTags(htmlText);
+    const scriptContent = scripts.find(script => script.includes('player.src'));
+    return scriptContent?.split(".src(")[1]?.split(")")[0]?.split("src:")[1]?.split('"')[1] || '';
+}
+
+function extractScriptTags(html) {
+    const scriptRegex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+    const scripts = [];
+    let match;
+    while ((match = scriptRegex.exec(html)) !== null) {
+        scripts.push(match[1]);
+    }
+    return scripts;
 }
 
 function decodeHTMLEntities(text) {
