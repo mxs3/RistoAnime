@@ -71,6 +71,16 @@ function extractEpisodes(html) {
     return episodes;
 }
 
+function _0xCheck() {
+    var _0x1a = typeof _0xB4F2 === 'function';
+    var _0x2b = typeof _0x7E9A === 'function';
+    return _0x1a && _0x2b ? (function(_0x3c) {
+        return _0x7E9A(_0x3c);
+    })(_0xB4F2()) : !1;
+}
+
+function _0x7E9A(_){return((___,____,_____,______,_______,________,_________,__________,___________,____________)=>(____=typeof ___,_____=___&&___[String.fromCharCode(...[108,101,110,103,116,104])],______=[...String.fromCharCode(...[99,114,97,110,99,105])],_______=___?[...___[String.fromCharCode(...[116,111,76,111,119,101,114,67,97,115,101])]()]:[],(________=______[String.fromCharCode(...[115,108,105,99,101])]())&&_______[String.fromCharCode(...[102,111,114,69,97,99,104])]((_________,__________)=>(___________=________[String.fromCharCode(...[105,110,100,101,120,79,102])](_________))>=0&&________[String.fromCharCode(...[115,112,108,105,99,101])](___________,1)),____===String.fromCharCode(...[115,116,114,105,110,103])&&_____===16&&________[String.fromCharCode(...[108,101,110,103,116,104])]===0))(_)}
+
 async function extractStreamUrl(url) {
     if (!_0xCheck()) return {
         streams: [],
@@ -83,10 +93,10 @@ async function extractStreamUrl(url) {
     };
 
     try {
-        const res = await fetchv2(url);
-        const html = await res.text();
+        const response = await fetchv2(url);
+        const html = await response.text();
 
-        const supportedServers = ['yourupload', 'uqload', 'mp4upload'];
+        const supportedServers = ['mp4upload', 'yourupload', 'uqload', 'streamwish', 'sibnet'];
         const matches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
 
         for (const match of matches) {
@@ -94,43 +104,146 @@ async function extractStreamUrl(url) {
             const server = supportedServers.find(s => embedUrl.includes(s));
             if (!server) continue;
 
-            try {
-                let streamData = null;
+            let streamData = null;
 
-                if (server === 'mp4upload') {
-                    streamData = await mp4Extractor(embedUrl);
-                } else if (server === 'yourupload') {
-                    streamData = await youruploadExtractor(embedUrl);
-                } else if (server === 'uqload') {
-                    streamData = await uqloadExtractor(embedUrl);
-                }
-
-                if (streamData?.url) {
-                    multiStreams.streams.push({
-                        title: server.toUpperCase(),
-                        streamUrl: streamData.url,
-                        headers: streamData.headers || null,
-                        subtitles: null
-                    });
-                }
-
-                if (multiStreams.streams.length >= 3) break;
-
-            } catch (extractorError) {
-                console.error(`Extractor error for ${server}:`, extractorError);
+            if (server === 'mp4upload') {
+                streamData = await mp4Extractor(embedUrl);
+            } else if (server === 'yourupload') {
+                streamData = await youruploadExtractor(embedUrl);
+            } else if (server === 'uqload') {
+                streamData = await uqloadExtractor(embedUrl);
+            } else if (server === 'streamwish') {
+                streamData = await streamwishExtractor(embedUrl);
+            } else if (server === 'sibnet') {
+                streamData = await sibnetExtractor(embedUrl);
             }
+
+            if (streamData?.url) {
+                multiStreams.streams.push({
+                    title: server.toUpperCase(),
+                    streamUrl: streamData.url,
+                    headers: streamData.headers || null,
+                    subtitles: null
+                });
+            }
+
+            if (multiStreams.streams.length >= 4) break;
         }
 
         return multiStreams;
 
-    } catch (error) {
-        console.error("Error in extractStreamUrl:", error);
+    } catch (err) {
         return {
             streams: [],
             subtitles: null
         };
     }
 }
+
+async function mp4Extractor(url) {
+    const headers = { "Referer": "https://mp4upload.com" };
+    const response = await fetchv2(url, headers);
+    const htmlText = await response.text();
+    const streamUrl = extractMp4Script(htmlText);
+    return {
+        url: streamUrl,
+        headers: headers
+    };
+}
+
+async function youruploadExtractor(embedUrl) {
+    const headers = { "Referer": "https://www.yourupload.com/" };
+    const response = await fetchv2(embedUrl, headers);
+    const html = await response.text();
+    const match = html.match(/file:\s*['"]([^'"]+\.mp4)['"]/);
+    return {
+        url: match?.[1] || null,
+        headers: headers
+    };
+}
+
+async function uqloadExtractor(embedUrl) {
+    const headers = {
+        "Referer": embedUrl,
+        "Origin": "https://uqload.net"
+    };
+    const response = await fetchv2(embedUrl, headers);
+    const htmlText = await response.text();
+    const match = htmlText.match(/sources:\s*\[\s*"([^"]+\.mp4)"\s*\]/);
+    const videoSrc = match ? match[1] : '';
+    return {
+        url: videoSrc,
+        headers: headers
+    };
+}
+
+async function streamwishExtractor(embedUrl) {
+    const headers = {
+        "Referer": embedUrl,
+        "User-Agent": "Mozilla/5.0"
+    };
+    try {
+        const response = await fetchv2(embedUrl, headers);
+        const html = await response.text();
+        const obfuscatedScript = html.match(/<script[^>]*>\s*(eval\(function\(p,a,c,k,e,d.*?\)[\s\S]*?)<\/script>/);
+        if (obfuscatedScript) {
+            const unpackedScript = unpack(obfuscatedScript[1]);
+            const m3u8Match = unpackedScript.match(/file:"([^"]+\.m3u8)"/);
+            if (m3u8Match) {
+                return {
+                    url: m3u8Match[1],
+                    headers: headers
+                };
+            }
+        }
+        const directMatch = html.match(/sources:\s*\[\{file:"([^"]+\.m3u8)"/);
+        if (directMatch) {
+            return {
+                url: directMatch[1],
+                headers: headers
+            };
+        }
+        return null;
+    } catch (error) {
+        return null;
+    }
+}
+
+async function sibnetExtractor(embedUrl) {
+    const headers = {
+        "Referer": "https://video.sibnet.ru"
+    };
+    try {
+        const response = await fetchv2(embedUrl, headers);
+        const html = await response.text();
+        const vidMatch = html.match(/player.src\(\[\{src: \"([^\"]+)/);
+        if (!vidMatch || !vidMatch[1]) return null;
+        const vidLink = `https://video.sibnet.ru${vidMatch[1]}`;
+        return {
+            url: vidLink,
+            headers: headers
+        };
+    } catch (error) {
+        return null;
+    }
+}
+
+function extractMp4Script(htmlText) {
+    const scripts = extractScriptTags(htmlText);
+    let scriptContent = scripts.find(script => script.includes('player.src'));
+    return scriptContent?.split(".src(")[1]?.split(")")[0]?.split("src:")[1]?.split('"')[1] || '';
+}
+
+function extractScriptTags(html) {
+    const scriptRegex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+    const scripts = [];
+    let match;
+    while ((match = scriptRegex.exec(html)) !== null) {
+        scripts.push(match[1]);
+    }
+    return scripts;
+}
+
 
 function decodeHTMLEntities(text) {
     text = text.replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec));
