@@ -87,7 +87,7 @@ async function extractStreamUrl(url) {
                 multiStreams.streams.push({
                     title: server.toUpperCase(),
                     streamUrl: streamData.url,
-                    headers: streamData.headers || {},
+                    headers: streamData.headers,
                     subtitles: null
                 });
             }
@@ -101,36 +101,52 @@ async function extractStreamUrl(url) {
     }
 }
 
-// ⚙️ Extractors
 async function mp4Extractor(url) {
-    const headers = { "Referer": "https://mp4upload.com" };
+    const headers = {
+        "Referer": "https://mp4upload.com/",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    };
     const response = await fetchv2(url, headers);
     const htmlText = await response.text();
     const streamUrl = extractMp4Script(htmlText);
-    return { url: streamUrl, headers };
+    return {
+        url: streamUrl,
+        headers: headers
+    };
 }
 
 async function youruploadExtractor(embedUrl) {
-    const headers = { "Referer": "https://www.yourupload.com/" };
+    const headers = {
+        "Referer": "https://www.yourupload.com/",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    };
     const response = await fetchv2(embedUrl, headers);
     const html = await response.text();
     const match = html.match(/file:\s*['"]([^'"]+\.mp4)['"]/);
-    return { url: match?.[1] || null, headers };
+    return {
+        url: match?.[1] || null,
+        headers: headers
+    };
 }
 
 async function uqloadExtractor(embedUrl) {
     const headers = {
         "Referer": embedUrl,
-        "Origin": "https://uqload.net"
+        "Origin": "https://uqload.net",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
     };
     const response = await fetchv2(embedUrl, headers);
     const htmlText = await response.text();
     const match = htmlText.match(/sources:\s*\[\s*"([^"]+\.mp4)"\s*\]/);
-    const videoSrc = match ? match[1] : '';
-    return { url: videoSrc, headers };
+    return {
+        url: match ? match[1] : null,
+        headers: headers
+    };
 }
 
-// 🧠 Helpers
 function extractMp4Script(htmlText) {
     const scripts = extractScriptTags(htmlText);
     const scriptContent = scripts.find(script => script.includes('player.src'));
