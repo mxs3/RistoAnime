@@ -12,7 +12,7 @@
     "streamType": "MP4",
     "quality": "auto",
     "baseUrl": "https://www.mp4upload.com/",
-    "searchBaseUrl": "https://ristoanime.com/?s=%s",
+    "searchBaseUrl": "https://ristoanime.net/?s=%s",
     "scriptUrl": "https://raw.githubusercontent.com/mxs3/RistoAnime/refs/heads/main/ristoanime.js",
     "type": "anime",
     "streamAsyncJS": true
