@@ -96,7 +96,6 @@ async function extractStreamUrl(url) {
         }
 
         return JSON.stringify(multiStreams);
-
     } catch (err) {
         return JSON.stringify({ streams: [], subtitles: null });
     }
