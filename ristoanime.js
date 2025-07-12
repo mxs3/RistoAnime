@@ -82,29 +82,42 @@ async function extractStreamUrl(html) {
         const server = supportedServers.find(s => embedUrl.includes(s));
         if (!server) continue;
 
-        let streamUrl = '';
-
         try {
-            const response = await soraFetch(embedUrl);
-            const fetchedHtml = await response.text();
-
-            if (server === 'mp4upload' || server === 'yourupload') {
-                const mp4Match = fetchedHtml.match(/player\.src\(\{\s*type:\s*["']video\/mp4["'],\s*src:\s*["']([^"']+)["']/i);
-                if (mp4Match) streamUrl = mp4Match[1].trim();
+            let streamUrl = '';
+            if (server === 'mp4upload') {
+                const htmlText = await (await fetchv2(embedUrl, {
+                    "Referer": "https://mp4upload.com/",
+                    "User-Agent": "Mozilla/5.0",
+                    "Accept": "text/html"
+                })).text();
+                streamUrl = extractMp4Script(htmlText);
+            } else if (server === 'yourupload') {
+                const htmlText = await (await fetchv2(embedUrl, {
+                    "Referer": "https://www.yourupload.com/",
+                    "User-Agent": "Mozilla/5.0",
+                    "Accept": "text/html"
+                })).text();
+                const match = htmlText.match(/file:\s*['"]([^'"]+\.mp4)['"]/);
+                streamUrl = match?.[1] || '';
             } else if (server === 'uqload') {
-                const match = fetchedHtml.match(/sources:\s*\[\s*"([^"]+\.mp4)"\s*\]/);
-                if (match) streamUrl = match[1];
+                const htmlText = await (await fetchv2(embedUrl, {
+                    "Referer": embedUrl,
+                    "Origin": "https://uqload.net",
+                    "User-Agent": "Mozilla/5.0",
+                    "Accept": "text/html"
+                })).text();
+                const match = htmlText.match(/sources:\s*\[\s*"([^"]+\.mp4)"\s*\]/);
+                streamUrl = match?.[1] || '';
             }
 
-            if (streamUrl) {
-                return streamUrl;
-            }
+            if (streamUrl) return streamUrl;
+
         } catch (err) {
             continue;
         }
     }
 
-    return '';
+    return 'https://files.catbox.moe/avolvc.mp4';
 }
 
 function decodeHTMLEntities(text) {
