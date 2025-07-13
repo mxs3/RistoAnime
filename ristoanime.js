@@ -12,8 +12,11 @@ function searchResults(html) {
 
         if (hrefMatch && titleMatch && imgMatch) {
             const href = hrefMatch[1].trim();
-            const title = titleMatch[1].trim();
+            let title = titleMatch[1].trim();
             const image = imgMatch[1].trim();
+
+            // إزالة الأحرف العربية من العنوان مع إبقاء الحروف الإنجليزية والأرقام والرموز
+            title = title.replace(/[\u0600-\u06FF]/g, '').replace(/\s+/g, ' ').trim();
 
             results.push({ title, image, href });
         }
