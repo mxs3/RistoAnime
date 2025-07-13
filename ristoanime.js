@@ -1,136 +1,188 @@
-async function fetchAndSearch(keyword) {
-  const url = `https://www.zimabadk.com/?s=${encodeURIComponent(keyword)}&type=anime`;
-  try {
-    const response = await soraFetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' }
+function searchResults(html) {
+    const results = [];
+
+    const itemBlocks = html.match(/<div class="MovieItem">[\s\S]*?<h4>(.*?)<\/h4>[\s\S]*?<\/a>/g);
+
+    if (!itemBlocks) return results;
+
+    itemBlocks.forEach(block => {
+        const hrefMatch = block.match(/<a href="([^"]+)"/);
+        const titleMatch = block.match(/<h4>(.*?)<\/h4>/);
+        const imgMatch = block.match(/background-image:\s*url\(([^)]+)\)/);
+
+        if (hrefMatch && titleMatch && imgMatch) {
+            const href = hrefMatch[1].trim();
+            const title = titleMatch[1].trim();
+            const image = imgMatch[1].trim();
+
+            results.push({ title, image, href });
+        }
     });
-    const html = await response.text();
-    const results = searchResults(html);
-    return JSON.stringify(results);
-  } catch (error) {
-    return JSON.stringify([]);
-  }
+
+    console.log(results);
+    return results;
 }
 
-function searchResults(html) {
-  const results = [];
-  const regex = /<div class="postBlockOne">[\s\S]*?<a[^>]+href="([^"]+)"[^>]+title="([^"]+)"[^>]*>[\s\S]*?<img[^>]+data-img="([^"]+)"/g;
-  const seen = new Set();
-  let match;
-
-  while ((match = regex.exec(html)) !== null) {
-    const href = match[1].trim();
-    const fullTitle = decodeHTMLEntities(match[2].trim());
-    const title = fullTitle.match(/[a-zA-Z0-9: \-]+/)?.[0]?.trim() || fullTitle;
-    const image = match[3].trim();
-
-    if (!seen.has(href)) {
-      results.push({ title, href, image });
-      seen.add(href);
-    }
-  }
-
-  return results;
+function decodeHTMLEntities(text) {
+  return text
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
 }
 
 function extractDetails(html) {
-  const result = {};
+  const details = {};
 
-  const storyMatch = html.match(/<div class="story">\s*<p>([\s\S]*?)<\/p>/);
-  result.description = storyMatch ? decodeHTMLEntities(storyMatch[1].trim()) : '';
+  // الوصف
+  const descMatch = html.match(/<div class="StoryArea">\s*<span>.*?<\/span>\s*<p>(.*?)<\/p>/s);
+  details.description = descMatch ? decodeHTMLEntities(descMatch[1].trim()) : 'N/A';
 
-  const releaseYearMatch = html.match(/سنة الاصدار\s*:\s*<\/span>\s*<a[^>]*>(\d{4})<\/a>/);
-  result.releaseYear = releaseYearMatch ? releaseYearMatch[1].trim() : '';
+  // العنوان الإنجليزي – إذا كان موجودًا
+  const englishTitleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+  details.englishTitle = englishTitleMatch ? decodeHTMLEntities(englishTitleMatch[1].trim()) : 'N/A';
 
-  const airedDateMatch = html.match(/بدأ عرضه من\s*:\s*<\/span>\s*<strong>([^<]+)<\/strong>/);
-  result.airedDate = airedDateMatch ? airedDateMatch[1].trim() : '';
+  // تاريخ العرض
+  const airedDateMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+  details.airedDate = airedDateMatch ? airedDateMatch[1].trim() : 'N/A';
 
+  // المدة
+  const durationMatch = html.match(/<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+  details.duration = durationMatch ? durationMatch[1].trim() : 'N/A';
+
+  // الأنواع
   const genres = [];
-  const genresBlockMatch = html.match(/الانواع\s*:\s*<\/span>([\s\S]*?)<\/li>/);
-  if (genresBlockMatch) {
-    const genreRegex = /<a[^>]*>([^<]+)<\/a>/g;
-    let m;
-    while ((m = genreRegex.exec(genresBlockMatch[1])) !== null) {
+  const genreBlock = html.match(/<span>\s*النوع\s*:\s*<\/span>(.*?)<\/li>/s);
+  if (genreBlock) {
+    const genreMatches = [...genreBlock[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)];
+    for (const m of genreMatches) {
       genres.push(decodeHTMLEntities(m[1].trim()));
     }
   }
-  result.genres = genres;
+  details.genres = genres;
 
-  const categories = [];
-  const categoriesBlockMatch = html.match(/التصنيفات\s*:\s*<\/span>([\s\S]*?)<\/li>/);
-  if (categoriesBlockMatch) {
-    const catRegex = /<a[^>]*>([^<]+)<\/a>/g;
-    let m;
-    while ((m = catRegex.exec(categoriesBlockMatch[1])) !== null) {
-      categories.push(decodeHTMLEntities(m[1].trim()));
-    }
-  }
-  result.categories = categories;
+  // الجودة
+  const qualityMatch = html.match(/<span>\s*الجودة\s*:\s*<\/span>(.*?)<\/li>/s);
+  details.quality = qualityMatch
+    ? [...qualityMatch[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => m[1].trim())
+    : [];
 
-  result.seasons = extractSeasons(html);
-  result.episodes = extractEpisodes(html); // دي مؤقتًا بتجيب اللي ظاهر فقط
+  // الصورة المصغرة من caption
+  const imageMatch = html.match(/\[caption[^\]]*\]<img[^>]+src="([^"]+)"/);
+  details.thumbnail = imageMatch ? imageMatch[1].trim() : '';
 
-  return result;
-}
+  // رابط السلسلة إن وُجد
+  const seriesMatch = html.match(/<span itemprop="title">([^<]+)<\/span><\/a><\/span>/);
+  details.seriesTitle = seriesMatch ? decodeHTMLEntities(seriesMatch[1].trim()) : '';
 
-function extractSeasons(html) {
-  const seasons = [];
-  const regex = /<li>\s*<a href="([^"]+)">\s*([^<]+)\s*<\/a>/g;
-  let match;
-
-  while ((match = regex.exec(html)) !== null) {
-    const href = match[1].trim();
-    const title = decodeHTMLEntities(match[2].trim());
-    seasons.push({ title, href });
-  }
-
-  return seasons;
+  return details;
 }
 
 function extractEpisodes(html) {
-  const episodes = [];
-  const regex = /<li[^>]*data-ep="(\d+)"[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[\s\S]*?<em[^>]*>([^<]+)<\/em>/g;
-  let match;
-  while ((match = regex.exec(html)) !== null) {
-    const epNum = match[3]?.trim();
-    const href = match[2]?.trim();
-    if (epNum && href) {
-      episodes.push({ number: epNum, href });
+    const episodes = [];
+
+    const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
+    let match;
+
+    while ((match = episodeRegex.exec(html)) !== null) {
+        const href = match[1].trim() + "/watch/";
+        const number = match[2].trim();
+
+        episodes.push({
+            href: href,
+            number: number
+        });
     }
-  }
-  return episodes;
+
+    if (episodes.length > 0 && episodes[0].number !== "1") {
+        episodes.reverse();
+    }
+
+    console.log(episodes);
+    return episodes;
 }
 
 async function extractStreamUrl(html) {
-  try {
-    // أولاً نحاول نجيب من data-video-source (سيرفر zimabadk الأساسي)
-    const sourceMatch = html.match(/data-video-source="([^"]+)"/);
-    if (sourceMatch && sourceMatch[1]) {
-      const url = sourceMatch[1].replace(/&amp;/g, "&");
-      return JSON.stringify({ streams: [{ quality: "Auto", url }] });
+    if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
+
+    const multiStreams = { streams: [], subtitles: null };
+
+    const serverMatch = html.match(/<li[^>]+data-watch="([^"]+)"/);
+    const embedUrl = serverMatch ? serverMatch[1].trim() : '';
+
+    if (!embedUrl) return JSON.stringify(multiStreams);
+
+    try {
+        const response = await soraFetch(embedUrl, {
+            headers: {
+                'Referer': embedUrl,
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
+            }
+        });
+        const embedHtml = await response.text();
+
+        // يدعم mp4upload و vidmoly وغيره حسب شكل الكود
+        let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
+                          || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
+
+        if (streamMatch) {
+            const videoUrl = streamMatch[1].trim();
+
+            multiStreams.streams.push({
+                title: "Main Server",
+                streamUrl: videoUrl,
+                headers: {
+                    "Referer": embedUrl,
+                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+                },
+                subtitles: null
+            });
+        }
+    } catch (err) {
+        console.error("extractStreamUrl error:", err);
     }
 
-    // لو مفهوش نرجع نجيب من iframe مباشرة
-    const iframeMatch = html.match(/<iframe[^>]+src="([^"]+)"/);
-    if (iframeMatch && iframeMatch[1]) {
-      return JSON.stringify({ streams: [{ quality: "Auto", url: iframeMatch[1] }] });
+    return JSON.stringify(multiStreams);
+}
+
+function decodeHTMLEntities(text) {
+    text = text.replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec));
+    
+    const entities = {
+        '&quot;': '"',
+        '&amp;': '&',
+        '&apos;': "'",
+        '&lt;': '<',
+        '&gt;': '>'
+    };
+    
+    for (const entity in entities) {
+        text = text.replace(new RegExp(entity, 'g'), entities[entity]);
     }
 
-    return null;
-  } catch (err) {
-    return null;
-  }
+    return text;
 }
 
-function decodeHTMLEntities(str) {
-  return str
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+async function soraFetch(url, options = { headers: {}, method: 'GET', body: null }) {
+    try {
+        return await fetchv2(url, options.headers ?? {}, options.method ?? 'GET', options.body ?? null);
+    } catch(e) {
+        try {
+            return await fetch(url, options);
+        } catch(error) {
+            return null;
+        }
+    }
 }
 
-async function fetchv2(url, options = {}) {
-  return await fetch(url, options);
+function _0xCheck() {
+    var _0x1a = typeof _0xB4F2 === 'function';
+    var _0x2b = typeof _0x7E9A === 'function';
+    return _0x1a && _0x2b ? (function(_0x3c) {
+        return _0x7E9A(_0x3c);
+    })(_0xB4F2()) : !1;
 }
+
+function _0x7E9A(_){return((___,____,_____,______,_______,________,_________,__________,___________,____________)=>(____=typeof ___,_____=___&&___[String.fromCharCode(...[108,101,110,103,116,104])],______=[...String.fromCharCode(...[99,114,97,110,99,105])],_______=___?[...___[String.fromCharCode(...[116,111,76,111,119,101,114,67,97,115,101])]()]:[],(________=______[String.fromCharCode(...[115,108,105,99,101])]())&&_______[String.fromCharCode(...[102,111,114,69,97,99,104])]((_________,__________)=>(___________=________[String.fromCharCode(...[105,110,100,101,120,79,102])](_________))>=0&&________[String.fromCharCode(...[115,112,108,105,99,101])](___________,1)),____===String.fromCharCode(...[115,116,114,105,110,103])&&_____===16&&________[String.fromCharCode(...[108,101,110,103,116,104])]===0))(_)}
