@@ -23,48 +23,43 @@ function searchResults(html) {
     return results;
 }
 
-async function extractDetailsWithSeasons(animeMainUrl) {
-  const res = await soraFetch(animeMainUrl);
-  const html = await res.text();
+async function fetchAllSeasonsEpisodes(animeMainUrl) {
+  const mainRes = await soraFetch(animeMainUrl);
+  const mainHtml = await mainRes.text();
 
-  // العنوان
-  const titleMatch = html.match(/<h1 class="Title">(.*?)<\/h1>/);
-  const title = titleMatch ? decodeHTMLEntities(titleMatch[1].trim()) : "No Title";
+  const seasons = extractSeasons(mainHtml); // فيه IDs زي 3107 و 3213
 
-  // الصورة
-  const imgMatch = html.match(/class="poster" style="background-image:\s*url\(([^)]+)\)/);
-  const image = imgMatch ? imgMatch[1].trim() : "";
+  const allSeasonsData = [];
 
-  // الوصف
-  const descMatch = html.match(/<div class="Description[^>]*">\s*<p>([\s\S]*?)<\/p>/);
-  const description = descMatch ? decodeHTMLEntities(descMatch[1].trim()) : "";
+  for (const season of seasons) {
+    const ajaxUrl = 'https://ristoanime.net/wp-admin/admin-ajax.php';
 
-  // النوع (genres)
-  const genres = [];
-  const genreRegex = /<span class="genre">([^<]+)<\/span>/g;
-  let genreMatch;
-  while ((genreMatch = genreRegex.exec(html)) !== null) {
-    genres.push(genreMatch[1].trim());
+    const formBody = new URLSearchParams();
+    formBody.append('action', 'load_season');
+    formBody.append('season', season.id);
+
+    const seasonRes = await soraFetch(ajaxUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Origin': 'https://ristoanime.net',
+        'Referer': animeMainUrl,
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
+      },
+      body: formBody.toString()
+    });
+
+    const seasonHtml = await seasonRes.text();
+
+    const episodes = extractEpisodesFromSeasonHtml(seasonHtml);
+
+    allSeasonsData.push({
+      title: season.title,
+      episodes
+    });
   }
 
-  // تاريخ العرض
-  let releaseDate = "";
-  const dateMatch = html.match(/تاريخ العرض[^<]*<\/strong>\s*<\/span>\s*([^<]+)<\/li>/);
-  if (dateMatch) {
-    releaseDate = dateMatch[1].trim();
-  }
-
-  // المواسم والحلقات
-  const seasons = await fetchAllSeasonsEpisodes(animeMainUrl);
-
-  return {
-    title,
-    image,
-    description,
-    genres,
-    releaseDate,
-    seasons
-  };
+  return allSeasonsData;
 }
 
 function extractEpisodes(html) {
