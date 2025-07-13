@@ -34,50 +34,60 @@ function decodeHTMLEntities(text) {
 }
 
 function extractDetails(html) {
-  const details = {};
+  const result = {};
 
-  // الوصف
-  const descMatch = html.match(/<div class="StoryArea">\s*<span>.*?<\/span>\s*<p>(.*?)<\/p>/s);
-  details.description = descMatch ? decodeHTMLEntities(descMatch[1].trim()) : 'N/A';
+  // 📝 القصة
+  const storyMatch = html.match(/<div class="StoryArea">[\s\S]*?<p>([\s\S]*?)<\/p>/);
+  result.description = storyMatch ? decodeHTMLEntities(storyMatch[1].trim()) : '';
 
-  // العنوان الإنجليزي – إذا كان موجودًا
-  const englishTitleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-  details.englishTitle = englishTitleMatch ? decodeHTMLEntities(englishTitleMatch[1].trim()) : 'N/A';
+  // 📅 سنة الإصدار
+  const releaseYearMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>(\d{4})<\/a>/);
+  result.releaseYear = releaseYearMatch ? releaseYearMatch[1].trim() : '';
 
-  // تاريخ العرض
-  const airedDateMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-  details.airedDate = airedDateMatch ? airedDateMatch[1].trim() : 'N/A';
-
-  // المدة
-  const durationMatch = html.match(/<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-  details.duration = durationMatch ? durationMatch[1].trim() : 'N/A';
-
-  // الأنواع
+  // 🎬 النوع (Genres)
   const genres = [];
-  const genreBlock = html.match(/<span>\s*النوع\s*:\s*<\/span>(.*?)<\/li>/s);
-  if (genreBlock) {
-    const genreMatches = [...genreBlock[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)];
-    for (const m of genreMatches) {
+  const genreBlockMatch = html.match(/<span>\s*النوع\s*:\s*<\/span>([\s\S]*?)<\/li>/);
+  if (genreBlockMatch) {
+    const genreRegex = /<a[^>]*>([^<]+)<\/a>/g;
+    let m;
+    while ((m = genreRegex.exec(genreBlockMatch[1])) !== null) {
       genres.push(decodeHTMLEntities(m[1].trim()));
     }
   }
-  details.genres = genres;
+  result.genres = genres;
 
-  // الجودة
-  const qualityMatch = html.match(/<span>\s*الجودة\s*:\s*<\/span>(.*?)<\/li>/s);
-  details.quality = qualityMatch
-    ? [...qualityMatch[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => m[1].trim())
-    : [];
+  // 📂 التصنيفات (Categories)
+  const categories = [];
+  const catBlockMatch = html.match(/<span>\s*التصنيف\s*:\s*<\/span>([\s\S]*?)<\/li>/);
+  if (catBlockMatch) {
+    const catRegex = /<a[^>]*>([^<]+)<\/a>/g;
+    let m;
+    while ((m = catRegex.exec(catBlockMatch[1])) !== null) {
+      categories.push(decodeHTMLEntities(m[1].trim()));
+    }
+  }
+  result.categories = categories;
 
-  // الصورة المصغرة من caption
-  const imageMatch = html.match(/\[caption[^\]]*\]<img[^>]+src="([^"]+)"/);
-  details.thumbnail = imageMatch ? imageMatch[1].trim() : '';
+  // 📺 المواسم والحلقات
+  result.seasons = extractSeasons(html);
+  result.episodes = extractEpisodes(html);
 
-  // رابط السلسلة إن وُجد
-  const seriesMatch = html.match(/<span itemprop="title">([^<]+)<\/span><\/a><\/span>/);
-  details.seriesTitle = seriesMatch ? decodeHTMLEntities(seriesMatch[1].trim()) : '';
+  return result;
+}
 
-  return details;
+// ✅ استخراج المواسم من الصفحة
+function extractSeasons(html) {
+  const seasons = [];
+  const regex = /<li[^>]*>\s*<a[^>]+data-season="(\d+)"[^>]*>\s*([^<]+)\s*<\/a>/g;
+  let match;
+
+  while ((match = regex.exec(html)) !== null) {
+    const id = match[1].trim();
+    const title = decodeHTMLEntities(match[2].trim());
+    seasons.push({ id, title });
+  }
+
+  return seasons;
 }
 
 function extractEpisodes(html) {
