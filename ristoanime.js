@@ -24,26 +24,29 @@ function searchResults(html) {
 }
 
 function extractDetails(html) {
-    const details = [];
+    const details = {};
 
+    // الوصف
     const descriptionMatch = html.match(/<p[^>]*>(.*?)<\/p>/s);
-    let description = descriptionMatch 
+    details.description = descriptionMatch 
         ? decodeHTMLEntities(descriptionMatch[1].trim()) 
         : 'N/A';
 
+    // مدة العرض
     const aliasMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-clock"><\/i>\s*<\/div>\s*<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>\s*(\d+)\s*<\/a>/);
-    let alias = aliasMatch ? aliasMatch[1].trim() : 'N/A';
+    details.alias = aliasMatch ? aliasMatch[1].trim() : 'N/A';
 
+    // سنة الإصدار
     const airdateMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-calendar"><\/i>\s*<\/div>\s*<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*?>\s*(\d{4})\s*<\/a>/);
-    let airdate = airdateMatch ? airdateMatch[1].trim() : 'N/A';
+    details.airdate = airdateMatch ? airdateMatch[1].trim() : 'N/A';
 
-    details.push({
-        description: description,
-        alias: alias,
-        airdate: airdate
-    });
+    // استخراج صورة البوستر أو المصغرة
+    const posterMatch = html.match(/<img[^>]+src="([^"]+\/poster-anime[^"]+)"[^>]*>/i);
+    details.image = posterMatch ? posterMatch[1].trim() : null;
 
-    console.log(details);
+    // استخراج الحلقات
+    details.episodes = extractEpisodes(html);
+
     return details;
 }
 
