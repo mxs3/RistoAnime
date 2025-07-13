@@ -24,27 +24,29 @@ function searchResults(html) {
 }
 
 function decodeHTMLEntities(text) {
-  return text
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, '&')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>');
+  text = text.replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec));
+  const entities = {
+    '&quot;': '"',
+    '&amp;': '&',
+    '&apos;': "'",
+    '&lt;': '<',
+    '&gt;': '>'
+  };
+  for (const entity in entities) {
+    text = text.replace(new RegExp(entity, 'g'), entities[entity]);
+  }
+  return text;
 }
 
 function extractDetails(html) {
   const result = {};
 
-  // 📝 القصة
   const storyMatch = html.match(/<div class="StoryArea">[\s\S]*?<p>([\s\S]*?)<\/p>/);
   result.description = storyMatch ? decodeHTMLEntities(storyMatch[1].trim()) : '';
 
-  // 📅 سنة الإصدار
   const releaseYearMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>(\d{4})<\/a>/);
   result.releaseYear = releaseYearMatch ? releaseYearMatch[1].trim() : '';
 
-  // 🎬 النوع (Genres)
   const genres = [];
   const genreBlockMatch = html.match(/<span>\s*النوع\s*:\s*<\/span>([\s\S]*?)<\/li>/);
   if (genreBlockMatch) {
@@ -56,7 +58,6 @@ function extractDetails(html) {
   }
   result.genres = genres;
 
-  // 📂 التصنيفات (Categories)
   const categories = [];
   const catBlockMatch = html.match(/<span>\s*التصنيف\s*:\s*<\/span>([\s\S]*?)<\/li>/);
   if (catBlockMatch) {
@@ -68,50 +69,59 @@ function extractDetails(html) {
   }
   result.categories = categories;
 
-  // 📺 المواسم والحلقات
   result.seasons = extractSeasons(html);
-  result.episodes = extractEpisodes(html);
+
+  const activeSeasonMatch = html.match(/<li class="active">\s*<a[^>]+data-season="(\d+)"/);
+  const activeSeasonId = activeSeasonMatch ? activeSeasonMatch[1].trim() : null;
+  result.episodes = activeSeasonId ? extractEpisodesBySeason(html, activeSeasonId) : [];
 
   return result;
 }
 
-// ✅ استخراج المواسم من الصفحة
 function extractSeasons(html) {
   const seasons = [];
   const regex = /<li[^>]*>\s*<a[^>]+data-season="(\d+)"[^>]*>\s*([^<]+)\s*<\/a>/g;
   let match;
-
   while ((match = regex.exec(html)) !== null) {
     const id = match[1].trim();
     const title = decodeHTMLEntities(match[2].trim());
     seasons.push({ id, title });
   }
-
   return seasons;
 }
 
-function extractEpisodes(html) {
-    const episodes = [];
+function extractEpisodesBySeason(html, seasonId) {
+  const regex = new RegExp(`<div[^>]*class="SeasonEpisodes"[^>]*data-season="${seasonId}"[\\s\\S]*?<\\/ul>`, 'i');
+  const seasonBlockMatch = html.match(regex);
+  if (!seasonBlockMatch) return [];
 
-    const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
-    let match;
+  const seasonBlock = seasonBlockMatch[0];
+  const episodes = [];
+  const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
+  let match;
+  while ((match = episodeRegex.exec(seasonBlock)) !== null) {
+    const href = match[1].trim() + "/watch/";
+    const number = match[2].trim();
+    episodes.push({ href, number });
+  }
+  return episodes;
+}
 
-    while ((match = episodeRegex.exec(html)) !== null) {
-        const href = match[1].trim() + "/watch/";
-        const number = match[2].trim();
+function extractEpisodesBySeason(html, seasonId) {
+  const regex = new RegExp(`<div[^>]*class="SeasonEpisodes"[^>]*data-season="${seasonId}"[\\s\\S]*?<\\/ul>`, 'i');
+  const seasonBlockMatch = html.match(regex);
+  if (!seasonBlockMatch) return [];
 
-        episodes.push({
-            href: href,
-            number: number
-        });
-    }
-
-    if (episodes.length > 0 && episodes[0].number !== "1") {
-        episodes.reverse();
-    }
-
-    console.log(episodes);
-    return episodes;
+  const seasonBlock = seasonBlockMatch[0];
+  const episodes = [];
+  const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
+  let match;
+  while ((match = episodeRegex.exec(seasonBlock)) !== null) {
+    const href = match[1].trim() + "/watch/";
+    const number = match[2].trim();
+    episodes.push({ href, number });
+  }
+  return episodes;
 }
 
 async function extractStreamUrl(html) {
