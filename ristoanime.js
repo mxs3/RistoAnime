@@ -23,55 +23,41 @@ function searchResults(html) {
     return results;
 }
 
+function decodeHTMLEntities(text) {
+    return text.replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec))
+               .replace(/&quot;/g, '"')
+               .replace(/&amp;/g, '&')
+               .replace(/&apos;/g, "'")
+               .replace(/&lt;/g, '<')
+               .replace(/&gt;/g, '>');
+}
+
 function extractDetails(html) {
     const details = {};
 
     // الوصف
-    const descriptionMatch = html.match(/<p[^>]*>(.*?)<\/p>/s);
-    details.description = descriptionMatch 
-        ? decodeHTMLEntities(descriptionMatch[1].trim()) 
+    const descriptionMatch = html.match(/<div class="StoryArea">.*?<p[^>]*>(.*?)<\/p>/s);
+    details.description = descriptionMatch
+        ? decodeHTMLEntities(descriptionMatch[1].trim())
         : 'N/A';
 
-    // مدة العرض
-    const aliasMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-clock"><\/i>\s*<\/div>\s*<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>\s*(\d+)\s*<\/a>/);
+    // مدة العرض (alias)
+    const aliasMatch = html.match(/<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>\s*([^<]+)\s*<\/a>/);
     details.alias = aliasMatch ? aliasMatch[1].trim() : 'N/A';
 
-    // سنة الإصدار
-    const airdateMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-calendar"><\/i>\s*<\/div>\s*<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*?>\s*(\d{4})\s*<\/a>/);
+    // تاريخ العرض (airdate)
+    const airdateMatch = html.match(/<span>\s*عرض من\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
     details.airdate = airdateMatch ? airdateMatch[1].trim() : 'N/A';
 
-    // صورة البوستر
-    const posterMatch = html.match(/<img[^>]+src="([^"]+poster-anime[^"]+\.(jpg|jpeg|png|webp))"/i);
-    details.image = posterMatch ? posterMatch[1].trim() : null;
+    // العنوان الانجليزي (اختياري)
+    const titleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+    details.englishTitle = titleMatch ? titleMatch[1].trim() : 'N/A';
 
-    // الحلقات
-    details.episodes = extractEpisodes(html);
+    // الصورة المصغرة (thumbnail)
+    const thumbMatch = html.match(/<img[^>]+src="([^"]+\/poster-anime[^"]+\.webp)"/);
+    details.thumbnail = thumbMatch ? thumbMatch[1].trim() : null;
 
     return details;
-}
-
-function extractEpisodes(html) {
-    const episodes = [];
-
-    const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
-    let match;
-
-    while ((match = episodeRegex.exec(html)) !== null) {
-        const href = match[1].trim() + "/watch/";
-        const number = match[2].trim();
-
-        episodes.push({
-            href: href,
-            number: number
-        });
-    }
-
-    if (episodes.length > 0 && episodes[0].number !== "1") {
-        episodes.reverse();
-    }
-
-    console.log(episodes);
-    return episodes;
 }
 
 async function extractStreamUrl(html) {
