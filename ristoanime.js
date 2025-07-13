@@ -55,6 +55,30 @@ function extractDetails(html) {
   return details;
 }
 
+function extractEpisodes(html) {
+    const episodes = [];
+
+    const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
+    let match;
+
+    while ((match = episodeRegex.exec(html)) !== null) {
+        const href = match[1].trim() + "/watch/";
+        const number = match[2].trim();
+
+        episodes.push({
+            href: href,
+            number: number
+        });
+    }
+
+    if (episodes.length > 0 && episodes[0].number !== "1") {
+        episodes.reverse();
+    }
+
+    console.log(episodes);
+    return episodes;
+}
+
 async function extractStreamUrl(html) {
     if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
 
