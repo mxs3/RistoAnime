@@ -23,68 +23,64 @@ function searchResults(html) {
     return results;
 }
 
-function extractEpisodes(html) {
+// دالة لاستخراج المواسم من صفحة الأنمي الرئيسية
+function extractSeasons(html) {
   const seasons = [];
+  const seasonRegex = /<li[^>]*>\s*<a[^>]*data-season="(\d+)"[^>]*>([^<]+)<\/a>/g;
+  let match;
+  while ((match = seasonRegex.exec(html)) !== null) {
+    seasons.push({
+      id: match[1],
+      title: match[2].trim()
+    });
+  }
+  return seasons;
+}
 
-  // استخراج عناوين المواسم مع data-season
-  const seasonTitleRegex = /<li[^>]*>\s*<a[^>]*data-season="(\d+)"[^>]*>([^<]+)<\/a>/g;
-  const seasonsMatches = [...html.matchAll(seasonTitleRegex)];
+// دالة لاستخراج الحلقات من صفحة موسم واحد (HTML الموسم)
+function extractEpisodesFromSeasonHtml(html) {
+  const episodes = [];
+  const episodeRegex = /<a[^>]+href="([^"]+)"[^>]*>\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
+  let match;
+  while ((match = episodeRegex.exec(html)) !== null) {
+    episodes.push({
+      number: match[2].trim(),
+      href: match[1].trim()
+    });
+  }
+  episodes.sort((a, b) => parseInt(a.number) - parseInt(b.number));
+  return episodes;
+}
 
-  for (const seasonMatch of seasonsMatches) {
-    const seasonId = seasonMatch[1];
-    const seasonTitle = seasonMatch[2].trim();
+// دالة رئيسية لجلب جميع الحلقات لكل المواسم
+async function fetchAllSeasonsEpisodes(animeMainUrl) {
+  // 1. جلب صفحة الأنمي الرئيسية
+  const mainRes = await fetch(animeMainUrl);
+  const mainHtml = await mainRes.text();
 
-    // استخراج حلقات الموسم بحسب data-season الموجود في EpisodesList
-    // نبحث داخل القسم الذي يحتوي حلقات الموسم هذا
-    // في العينة المقدمة الحلقات كلها في <div class="EpisodesList"> بدون تمييز data-season
-    // لكن غالبا في صفحة كاملة يتم تغيير محتوى EpisodesList حسب الموسم المختار (Ajax)
-    // لذلك سنفترض أن الحلقات التي في HTML حالياً تخص الموسم النشط فقط.
+  // 2. استخراج المواسم
+  const seasons = extractSeasons(mainHtml);
 
-    // إذا كان HTML يحتوي حلقات لكل موسم داخل <div class="EpisodesList" data-season="..."> 
-    // يمكننا تعديل هذا، لكن حسب العينة الحلقات موجودة بدون data-season داخل EpisodesList واحدة فقط.
+  // 3. جلب الحلقات لكل موسم
+  const allSeasonsData = [];
+  for (const season of seasons) {
+    // هنا لازم تكون عندك طريقة لبناء رابط صفحة الموسم حسب id الموسم
+    // غالبا الرابط بيكون نفس الرابط مع إضافة باراميتر season مثلاً:
+    // https://ristoanime.net/series/انمي-jujutsu-kaisen/?season=3107
+    const seasonUrl = `${animeMainUrl}?season=${season.id}`;
 
-    // لذلك، نبحث عن الحلقات داخل HTML وحاولنا فلترة حسب الموسم في الرابط (إذا ممكن)
+    const seasonRes = await fetch(seasonUrl);
+    const seasonHtml = await seasonRes.text();
 
-    // استخراج الحلقات من <div class="EpisodesList"> ... </div>
-    const episodesListRegex = /<div class="EpisodesList">([\s\S]*?)<\/div>/;
-    const episodesListMatch = html.match(episodesListRegex);
-    if (!episodesListMatch) continue;
+    const episodes = extractEpisodesFromSeasonHtml(seasonHtml);
 
-    const episodesHtml = episodesListMatch[1];
-
-    // استخراج حلقات مع فلترة حسب رابط الموسم (إذا الرابط يحتوي الموسم)
-    const episodeRegex = /<a[^>]+href="([^"]+)"[^>]*>\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
-    const episodes = [];
-    let match;
-
-    while ((match = episodeRegex.exec(episodesHtml)) !== null) {
-      const href = match[1];
-      const episodeNum = match[2].trim();
-
-      // فلترة حسب الموسم: الرابط غالبًا يحتوي اسم الموسم (مثلا "الموسم-2" أو "season-2")
-      // نستخرج رقم الموسم من الرابط
-      const seasonInHrefMatch = href.match(/season[-_]?(?<seasonNum>\d+)/i);
-      const seasonNumInHref = seasonInHrefMatch ? seasonInHrefMatch.groups.seasonNum : null;
-
-      if (seasonNumInHref === null) {
-        // إذا لم نستطع تحديد الموسم من الرابط، افترض ان الحلقة تخص الموسم الأول فقط
-        if (seasonId === seasonsMatches[0][1]) {
-          episodes.push({ number: episodeNum, href });
-        }
-      } else {
-        if (seasonNumInHref === seasonId) {
-          episodes.push({ number: episodeNum, href });
-        }
-      }
-    }
-
-    if (episodes.length > 0) {
-      episodes.sort((a, b) => parseInt(a.number) - parseInt(b.number));
-      seasons.push({ title: seasonTitle, episodes });
-    }
+    allSeasonsData.push({
+      title: season.title,
+      episodes
+    });
   }
 
-  return seasons;
+  return allSeasonsData; // مصفوفة من المواسم مع الحلقات
 }
 
 function extractEpisodes(html) {
