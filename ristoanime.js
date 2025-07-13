@@ -33,6 +33,13 @@ function decodeHTMLEntities(text) {
     .replace(/&gt;/g, '>');
 }
 
+function extractSeasons(html) {
+  return [{
+    title: "Season 1",
+    episodes: extractEpisodes(html) // دي دالتك الأصلية اللي شغالة تمام
+  }];
+}
+
 function extractDetails(html) {
   const details = {};
 
@@ -69,9 +76,12 @@ function extractDetails(html) {
     ? [...qualityMatch[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => m[1].trim())
     : [];
 
-  // الصورة المصغرة داخل caption
+  // الصورة المصغرة للحلقة (من caption)
   const imageMatch = html.match(/\[caption[^\]]*\]<img[^>]+src="([^"]+)"/);
   details.thumbnail = imageMatch ? imageMatch[1].trim() : '';
+
+  // دمج المواسم (موسم واحد يحتوي الحلقات المستخرجة)
+  details.seasons = extractSeasons(html);
 
   return details;
 }
