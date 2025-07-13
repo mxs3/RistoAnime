@@ -23,71 +23,85 @@ function searchResults(html) {
     return results;
 }
 
-function extractSeasons(html) {
-  const seasons = [];
-  const seasonRegex = /<li[^>]*>\s*<a[^>]*data-season="(\d+)"[^>]*>([^<]+)<\/a>/g;
-  let match;
-  while ((match = seasonRegex.exec(html)) !== null) {
-    seasons.push({
-      id: match[1],
-      title: match[2].trim()
-    });
-  }
-  return seasons;
+function decodeHTMLEntities(text) {
+  return text
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
 }
 
-function extractEpisodesFromSeasonHtml(html) {
-  const episodes = [];
-  const episodeRegex = /<a[^>]+href="([^"]+)"[^>]*>\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/gi;
-  let match;
+function extractDetails(html) {
+  const details = {};
 
-  while ((match = episodeRegex.exec(html)) !== null) {
-    episodes.push({
-      number: match[2].trim(),
-      href: match[1].trim() + "/watch/"
-    });
+  // الوصف
+  const descMatch = html.match(/<div class="StoryArea">\s*<span>.*?<\/span>\s*<p>(.*?)<\/p>/s);
+  details.description = descMatch ? decodeHTMLEntities(descMatch[1].trim()) : 'N/A';
+
+  // العنوان الإنجليزي – إذا كان موجودًا
+  const englishTitleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+  details.englishTitle = englishTitleMatch ? decodeHTMLEntities(englishTitleMatch[1].trim()) : 'N/A';
+
+  // تاريخ العرض
+  const airedDateMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+  details.airedDate = airedDateMatch ? airedDateMatch[1].trim() : 'N/A';
+
+  // المدة
+  const durationMatch = html.match(/<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+  details.duration = durationMatch ? durationMatch[1].trim() : 'N/A';
+
+  // الأنواع
+  const genres = [];
+  const genreBlock = html.match(/<span>\s*النوع\s*:\s*<\/span>(.*?)<\/li>/s);
+  if (genreBlock) {
+    const genreMatches = [...genreBlock[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)];
+    for (const m of genreMatches) {
+      genres.push(decodeHTMLEntities(m[1].trim()));
+    }
   }
+  details.genres = genres;
 
-  episodes.sort((a, b) => parseInt(a.number) - parseInt(b.number));
-  return episodes;
+  // الجودة
+  const qualityMatch = html.match(/<span>\s*الجودة\s*:\s*<\/span>(.*?)<\/li>/s);
+  details.quality = qualityMatch
+    ? [...qualityMatch[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => m[1].trim())
+    : [];
+
+  // الصورة المصغرة من caption
+  const imageMatch = html.match(/\[caption[^\]]*\]<img[^>]+src="([^"]+)"/);
+  details.thumbnail = imageMatch ? imageMatch[1].trim() : '';
+
+  // رابط السلسلة إن وُجد
+  const seriesMatch = html.match(/<span itemprop="title">([^<]+)<\/span><\/a><\/span>/);
+  details.seriesTitle = seriesMatch ? decodeHTMLEntities(seriesMatch[1].trim()) : '';
+
+  return details;
 }
 
-async function fetchAllSeasonsEpisodes(animeMainUrl) {
-  const mainRes = await soraFetch(animeMainUrl);
-  const mainHtml = await mainRes.text();
+function extractEpisodes(html) {
+    const episodes = [];
 
-  const seasons = extractSeasons(mainHtml);
+    const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
+    let match;
 
-  const allSeasonsData = [];
+    while ((match = episodeRegex.exec(html)) !== null) {
+        const href = match[1].trim() + "/watch/";
+        const number = match[2].trim();
 
-  for (const season of seasons) {
-    const ajaxUrl = 'https://ristoanime.net/wp-admin/admin-ajax.php';
+        episodes.push({
+            href: href,
+            number: number
+        });
+    }
 
-    const formBody = new URLSearchParams();
-    formBody.append('action', 'load_season');
-    formBody.append('season', season.id);
+    if (episodes.length > 0 && episodes[0].number !== "1") {
+        episodes.reverse();
+    }
 
-    const seasonRes = await soraFetch(ajaxUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Origin': 'https://ristoanime.net',
-        'Referer': animeMainUrl,
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
-      },
-      body: formBody.toString()
-    });
-
-    const seasonHtml = await seasonRes.text();
-    const episodes = extractEpisodesFromSeasonHtml(seasonHtml);
-
-    allSeasonsData.push({
-      title: season.title,
-      episodes
-    });
-  }
-
-  return allSeasonsData;
+    console.log(episodes);
+    return episodes;
 }
 
 async function extractStreamUrl(html) {
