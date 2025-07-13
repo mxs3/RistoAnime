@@ -24,45 +24,51 @@ function searchResults(html) {
 }
 
 function extractDetails(html) {
-  const storyMatch = html.match(/<div class="StoryArea">\s*<span>[^<]*<\/span>\s*<p>(.*?)<\/p>/);
-  const description = storyMatch ? decodeHTMLEntities(storyMatch[1].trim()) : "";
+    const storyMatch = html.match(/<div class="StoryArea">\s*<span>[^<]*<\/span>\s*<p>(.*?)<\/p>/);
+    const description = storyMatch ? decodeHTMLEntities(storyMatch[1].trim()) : "";
 
-  const genreMatches = [...html.matchAll(/<span>\s*النوع\s*:\s*<\/span>(.*?)<\/li>/g)];
-  const genres = genreMatches.length
-    ? [...genreMatches[0][1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => decodeHTMLEntities(m[1].trim()))
-    : [];
+    const genreMatches = html.match(/<span>\s*النوع\s*:\s*<\/span>([\s\S]*?)<\/li>/);
+    const genres = genreMatches
+        ? [...genreMatches[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => decodeHTMLEntities(m[1].trim()))
+        : [];
 
-  const categoryMatches = [...html.matchAll(/<span>\s*التصنيف\s*:\s*<\/span>(.*?)<\/li>/g)];
-  const categories = categoryMatches.length
-    ? [...categoryMatches[0][1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => decodeHTMLEntities(m[1].trim()))
-    : [];
+    const categoryMatches = html.match(/<span>\s*التصنيف\s*:\s*<\/span>([\s\S]*?)<\/li>/);
+    const categories = categoryMatches
+        ? [...categoryMatches[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => decodeHTMLEntities(m[1].trim()))
+        : [];
 
-  const yearMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>(\d{4})<\/a>/);
-  const releaseYear = yearMatch ? yearMatch[1].trim() : "";
+    const yearMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>(\d{4})<\/a>/);
+    const releaseYear = yearMatch ? yearMatch[1].trim() : "";
 
-  const seasons = [];
-  const seasonRegex = /<li[^>]*>\s*<a[^>]+data-season="(\d+)"[^>]*>\s*([^<]+)<\/a>/g;
-  let seasonMatch;
-  while ((seasonMatch = seasonRegex.exec(html)) !== null) {
-    seasons.push({
-      id: seasonMatch[1].trim(),
-      title: decodeHTMLEntities(seasonMatch[2].trim())
-    });
-  }
+    // استخراج المواسم
+    const seasons = [];
+    const seasonRegex = /<li[^>]*>\s*<a[^>]+data-season="(\d+)"[^>]*>\s*([^<]+)<\/a>/g;
+    let seasonMatch;
+    while ((seasonMatch = seasonRegex.exec(html)) !== null) {
+        seasons.push({
+            id: seasonMatch[1].trim(),
+            title: decodeHTMLEntities(seasonMatch[2].trim())
+        });
+    }
 
-  const activeSeasonMatch = html.match(/<li class="active">\s*<a[^>]+data-season="(\d+)"/);
-  const activeSeasonId = activeSeasonMatch ? activeSeasonMatch[1].trim() : null;
+    // استخراج الحلقات لكل موسم
+    const episodes = [];
+    for (const season of seasons) {
+        episodes.push({
+            seasonId: season.id,
+            seasonTitle: season.title,
+            episodes: extractEpisodes(html, season.id)
+        });
+    }
 
-  const episodes = activeSeasonId ? extractEpisodes(html, activeSeasonId) : [];
-
-  return {
-    description,
-    releaseYear,
-    genres,
-    categories,
-    seasons,
-    episodes
-  };
+    return {
+        description,
+        releaseYear,
+        genres,
+        categories,
+        seasons,
+        episodes
+    };
 }
 
 function extractEpisodes(html, seasonId) {
