@@ -33,11 +33,27 @@ function decodeHTMLEntities(text) {
     .replace(/&gt;/g, '>');
 }
 
-function extractSeasons(html) {
-  return [{
-    title: "Season 1",
-    episodes: extractEpisodes(html) // دي دالتك الأصلية اللي شغالة تمام
-  }];
+function extractEpisodes(html) {
+  const episodes = [];
+
+  const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
+  let match;
+
+  while ((match = episodeRegex.exec(html)) !== null) {
+    const href = match[1].trim() + "/watch/";
+    const number = match[2].trim();
+
+    episodes.push({
+      href: href,
+      number: number
+    });
+  }
+
+  if (episodes.length > 0 && episodes[0].number !== "1") {
+    episodes.reverse();
+  }
+
+  return episodes;
 }
 
 function extractDetails(html) {
@@ -76,38 +92,33 @@ function extractDetails(html) {
     ? [...qualityMatch[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => m[1].trim())
     : [];
 
-  // الصورة المصغرة للحلقة (من caption)
+  // الصورة المصغرة داخل caption
   const imageMatch = html.match(/\[caption[^\]]*\]<img[^>]+src="([^"]+)"/);
   details.thumbnail = imageMatch ? imageMatch[1].trim() : '';
 
-  // دمج المواسم (موسم واحد يحتوي الحلقات المستخرجة)
-  details.seasons = extractSeasons(html);
+  // المواسم والحلقات
+  const episodes = extractEpisodes(html);
+  const seasonMatches = [...html.matchAll(/<a[^>]+data-season="(\d+)"[^>]*>(.*?)<\/a>/g)];
+  const seasons = [];
+
+  if (seasonMatches.length > 0) {
+    for (const [, , title] of seasonMatches) {
+      seasons.push({
+        title: title.trim(),
+        episodes: episodes
+      });
+      break; // حالياً نربط الكل بأول موسم فقط
+    }
+  } else {
+    seasons.push({
+      title: 'Season 1',
+      episodes: episodes
+    });
+  }
+
+  details.seasons = seasons;
 
   return details;
-}
-
-function extractEpisodes(html) {
-    const episodes = [];
-
-    const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
-    let match;
-
-    while ((match = episodeRegex.exec(html)) !== null) {
-        const href = match[1].trim() + "/watch/";
-        const number = match[2].trim();
-
-        episodes.push({
-            href: href,
-            number: number
-        });
-    }
-
-    if (episodes.length > 0 && episodes[0].number !== "1") {
-        episodes.reverse();
-    }
-
-    console.log(episodes);
-    return episodes;
 }
 
 async function extractStreamUrl(html) {
