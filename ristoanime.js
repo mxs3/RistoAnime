@@ -73,7 +73,7 @@ function extractDetails(html) {
 
   const activeSeasonMatch = html.match(/<li class="active">\s*<a[^>]+data-season="(\d+)"/);
   const activeSeasonId = activeSeasonMatch ? activeSeasonMatch[1].trim() : null;
-  result.episodes = activeSeasonId ? extractEpisodesBySeason(html, activeSeasonId) : [];
+  result.episodes = activeSeasonId ? extractEpisodes(html, activeSeasonId) : [];
 
   return result;
 }
@@ -90,37 +90,33 @@ function extractSeasons(html) {
   return seasons;
 }
 
-function extractEpisodesBySeason(html, seasonId) {
-  const regex = new RegExp(`<div[^>]*class="SeasonEpisodes"[^>]*data-season="${seasonId}"[\\s\\S]*?<\\/ul>`, 'i');
-  const seasonBlockMatch = html.match(regex);
-  if (!seasonBlockMatch) return [];
+function extractEpisodes(html, seasonId) {
+  let block = html;
+  if (seasonId) {
+    const regex = new RegExp(`<div[^>]*class="SeasonEpisodes"[^>]*data-season="${seasonId}"[\\s\\S]*?<\\/ul>`, 'i');
+    const match = html.match(regex);
+    if (match) block = match[0];
+    else return [];
+  }
 
-  const seasonBlock = seasonBlockMatch[0];
   const episodes = [];
   const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
   let match;
-  while ((match = episodeRegex.exec(seasonBlock)) !== null) {
+
+  while ((match = episodeRegex.exec(block)) !== null) {
     const href = match[1].trim() + "/watch/";
     const number = match[2].trim();
-    episodes.push({ href, number });
-  }
-  return episodes;
-}
 
-function extractEpisodesBySeason(html, seasonId) {
-  const regex = new RegExp(`<div[^>]*class="SeasonEpisodes"[^>]*data-season="${seasonId}"[\\s\\S]*?<\\/ul>`, 'i');
-  const seasonBlockMatch = html.match(regex);
-  if (!seasonBlockMatch) return [];
-
-  const seasonBlock = seasonBlockMatch[0];
-  const episodes = [];
-  const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
-  let match;
-  while ((match = episodeRegex.exec(seasonBlock)) !== null) {
-    const href = match[1].trim() + "/watch/";
-    const number = match[2].trim();
-    episodes.push({ href, number });
+    episodes.push({
+      href: href,
+      number: number
+    });
   }
+
+  if (episodes.length > 0 && episodes[0].number !== "1") {
+    episodes.reverse();
+  }
+
   return episodes;
 }
 
