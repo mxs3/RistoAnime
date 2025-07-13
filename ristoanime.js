@@ -23,11 +23,40 @@ function searchResults(html) {
     return results;
 }
 
+function extractSeasons(html) {
+  const seasons = [];
+  const seasonRegex = /<li[^>]*>\s*<a[^>]*data-season="(\d+)"[^>]*>([^<]+)<\/a>/g;
+  let match;
+  while ((match = seasonRegex.exec(html)) !== null) {
+    seasons.push({
+      id: match[1],
+      title: match[2].trim()
+    });
+  }
+  return seasons;
+}
+
+function extractEpisodesFromSeasonHtml(html) {
+  const episodes = [];
+  const episodeRegex = /<a[^>]+href="([^"]+)"[^>]*>\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/gi;
+  let match;
+
+  while ((match = episodeRegex.exec(html)) !== null) {
+    episodes.push({
+      number: match[2].trim(),
+      href: match[1].trim() + "/watch/"
+    });
+  }
+
+  episodes.sort((a, b) => parseInt(a.number) - parseInt(b.number));
+  return episodes;
+}
+
 async function fetchAllSeasonsEpisodes(animeMainUrl) {
   const mainRes = await soraFetch(animeMainUrl);
   const mainHtml = await mainRes.text();
 
-  const seasons = extractSeasons(mainHtml); // فيه IDs زي 3107 و 3213
+  const seasons = extractSeasons(mainHtml);
 
   const allSeasonsData = [];
 
@@ -50,7 +79,6 @@ async function fetchAllSeasonsEpisodes(animeMainUrl) {
     });
 
     const seasonHtml = await seasonRes.text();
-
     const episodes = extractEpisodesFromSeasonHtml(seasonHtml);
 
     allSeasonsData.push({
@@ -60,30 +88,6 @@ async function fetchAllSeasonsEpisodes(animeMainUrl) {
   }
 
   return allSeasonsData;
-}
-
-function extractEpisodes(html) {
-    const episodes = [];
-
-    const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
-    let match;
-
-    while ((match = episodeRegex.exec(html)) !== null) {
-        const href = match[1].trim() + "/watch/";
-        const number = match[2].trim();
-
-        episodes.push({
-            href: href,
-            number: number
-        });
-    }
-
-    if (episodes.length > 0 && episodes[0].number !== "1") {
-        episodes.reverse();
-    }
-
-    console.log(episodes);
-    return episodes;
 }
 
 async function extractStreamUrl(html) {
