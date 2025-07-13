@@ -40,11 +40,11 @@ function extractDetails(html) {
     const airdateMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-calendar"><\/i>\s*<\/div>\s*<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*?>\s*(\d{4})\s*<\/a>/);
     details.airdate = airdateMatch ? airdateMatch[1].trim() : 'N/A';
 
-    // استخراج صورة البوستر أو المصغرة
-    const posterMatch = html.match(/<img[^>]+src="([^"]+\/poster-anime[^"]+)"[^>]*>/i);
+    // صورة البوستر
+    const posterMatch = html.match(/<img[^>]+src="([^"]+poster-anime[^"]+\.(jpg|jpeg|png|webp))"/i);
     details.image = posterMatch ? posterMatch[1].trim() : null;
 
-    // استخراج الحلقات
+    // الحلقات
     details.episodes = extractEpisodes(html);
 
     return details;
