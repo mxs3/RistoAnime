@@ -37,20 +37,20 @@ function extractDetails(html) {
   const details = {};
 
   // الوصف
-  const descMatch = html.match(/<div class="StoryArea">\s*<span>.*?<\/span>\s*<p>(.*?)<\/p>/s);
-  details.description = descMatch ? decodeHTMLEntities(descMatch[1].trim()) : 'N/A';
+  const descriptionMatch = html.match(/<div class="StoryArea">[\s\S]*?<p>(.*?)<\/p>/);
+  details.description = descriptionMatch ? decodeHTMLEntities(descriptionMatch[1].trim()) : 'N/A';
 
-  // العنوان الإنجليزي – إذا كان موجودًا
-  const englishTitleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-  details.englishTitle = englishTitleMatch ? decodeHTMLEntities(englishTitleMatch[1].trim()) : 'N/A';
-
-  // تاريخ العرض
-  const airedDateMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-  details.airedDate = airedDateMatch ? airedDateMatch[1].trim() : 'N/A';
-
-  // المدة
+  // مدة العرض
   const durationMatch = html.match(/<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
   details.duration = durationMatch ? durationMatch[1].trim() : 'N/A';
+
+  // تاريخ العرض
+  const airdateMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>(\d{4})<\/a>/);
+  details.airdate = airdateMatch ? airdateMatch[1].trim() : 'N/A';
+
+  // العنوان الإنجليزي
+  const titleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+  details.englishTitle = titleMatch ? decodeHTMLEntities(titleMatch[1].trim()) : 'N/A';
 
   // الأنواع
   const genres = [];
@@ -69,13 +69,9 @@ function extractDetails(html) {
     ? [...qualityMatch[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => m[1].trim())
     : [];
 
-  // الصورة المصغرة من caption
+  // الصورة المصغرة داخل caption
   const imageMatch = html.match(/\[caption[^\]]*\]<img[^>]+src="([^"]+)"/);
   details.thumbnail = imageMatch ? imageMatch[1].trim() : '';
-
-  // رابط السلسلة إن وُجد
-  const seriesMatch = html.match(/<span itemprop="title">([^<]+)<\/span><\/a><\/span>/);
-  details.seriesTitle = seriesMatch ? decodeHTMLEntities(seriesMatch[1].trim()) : '';
 
   return details;
 }
