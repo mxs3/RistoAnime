@@ -23,25 +23,10 @@ function searchResults(html) {
     return results;
 }
 
-function decodeHTMLEntities(text) {
-  text = text.replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec));
-  const entities = {
-    '&quot;': '"',
-    '&amp;': '&',
-    '&apos;': "'",
-    '&lt;': '<',
-    '&gt;': '>'
-  };
-  for (const entity in entities) {
-    text = text.replace(new RegExp(entity, 'g'), entities[entity]);
-  }
-  return text;
-}
-
 function extractDetails(html) {
   const result = {};
 
-  const storyMatch = html.match(/<div class="StoryArea">[\s\S]*?<p>([\s\S]*?)<\/p>/);
+  const storyMatch = html.match(/<div class="StoryArea">\s*<span>[^<]*<\/span>\s*<p>([\s\S]*?)<\/p>/);
   result.description = storyMatch ? decodeHTMLEntities(storyMatch[1].trim()) : '';
 
   const releaseYearMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>(\d{4})<\/a>/);
@@ -76,18 +61,6 @@ function extractDetails(html) {
   result.episodes = activeSeasonId ? extractEpisodes(html, activeSeasonId) : [];
 
   return result;
-}
-
-function extractSeasons(html) {
-  const seasons = [];
-  const regex = /<li[^>]*>\s*<a[^>]+data-season="(\d+)"[^>]*>\s*([^<]+)\s*<\/a>/g;
-  let match;
-  while ((match = regex.exec(html)) !== null) {
-    const id = match[1].trim();
-    const title = decodeHTMLEntities(match[2].trim());
-    seasons.push({ id, title });
-  }
-  return seasons;
 }
 
 function extractEpisodes(html, seasonId) {
