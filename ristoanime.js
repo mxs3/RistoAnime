@@ -120,9 +120,49 @@ async function extractStreamUrl(html) {
         });
         const embedHtml = await response.text();
 
-        // يدعم mp4upload و vidmoly وغيره حسب شكل الكود
+        // 1. جرب استخراج جودات متعددة (mp4 أو m3u8) — حسب تنسيقات شائعة
+        // مثال: sources: [{file: 'url', label: '720p'}, {...}]
+        const sourcesMatch = embedHtml.match(/sources:\s*(\[[^\]]+\])/i);
+
+        if (sourcesMatch) {
+            let sources = [];
+            try {
+                // تحويل نص المصفوفة إلى JSON صالح (مع بعض التنظيف البسيط)
+                const jsonStr = sourcesMatch[1]
+                    .replace(/file:/g, '"file":')
+                    .replace(/label:/g, '"label":')
+                    .replace(/type:/g, '"type":')
+                    .replace(/'/g, '"');
+
+                sources = JSON.parse(jsonStr);
+            } catch(e) {
+                // إذا فشل التحويل، نترك sources فارغة ونتابع الطريقة القديمة
+                console.warn("Failed to parse sources JSON:", e);
+            }
+
+            if (sources.length > 0) {
+                sources.forEach(src => {
+                    if (src.file) {
+                        multiStreams.streams.push({
+                            title: src.label || "Unknown Quality",
+                            streamUrl: src.file,
+                            headers: {
+                                "Referer": embedUrl,
+                                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+                            },
+                            subtitles: null
+                        });
+                    }
+                });
+
+                return JSON.stringify(multiStreams);
+            }
+        }
+
+        // 2. إذا ما فيش جودات، استخدم الطريقة القديمة (رابط واحد)
         let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
-                          || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
+                          || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i)
+                          || embedHtml.match(/source\s*src=['"]([^'"]+)['"]/i);
 
         if (streamMatch) {
             const videoUrl = streamMatch[1].trim();
