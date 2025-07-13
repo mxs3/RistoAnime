@@ -25,7 +25,7 @@ function searchResults(html) {
 
 function decodeHTMLEntities(text) {
   return text
-    .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
     .replace(/&quot;/g, '"')
     .replace(/&amp;/g, '&')
     .replace(/&apos;/g, "'")
@@ -37,20 +37,45 @@ function extractDetails(html) {
   const details = {};
 
   // الوصف
-  const descriptionMatch = html.match(/<div class="StoryArea">.*?<p>(.*?)<\/p>/s);
-  details.description = descriptionMatch ? decodeHTMLEntities(descriptionMatch[1].trim()) : 'N/A';
+  const descMatch = html.match(/<div class="StoryArea">\s*<span>.*?<\/span>\s*<p>(.*?)<\/p>/s);
+  details.description = descMatch ? decodeHTMLEntities(descMatch[1].trim()) : 'N/A';
 
-  // العنوان الإنجليزي
-  const titleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>(.*?)<\/a>/);
-  details.englishTitle = titleMatch ? decodeHTMLEntities(titleMatch[1].trim()) : 'N/A';
+  // العنوان الإنجليزي – إذا كان موجودًا
+  const englishTitleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+  details.englishTitle = englishTitleMatch ? decodeHTMLEntities(englishTitleMatch[1].trim()) : 'N/A';
 
   // تاريخ العرض
-  const airedDateMatch = html.match(/<span>\s*عرض من\s*:\s*<\/span>\s*<a[^>]*>(.*?)<\/a>/);
+  const airedDateMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
   details.airedDate = airedDateMatch ? airedDateMatch[1].trim() : 'N/A';
 
-  // الصورة المصغرة للحلقة (داخل caption)
-  const thumbMatch = html.match(/\[caption[^\]]*\]<img[^>]+src="([^"]+)"[^>]*>/);
-  details.thumbnail = thumbMatch ? thumbMatch[1].trim() : '';
+  // المدة
+  const durationMatch = html.match(/<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+  details.duration = durationMatch ? durationMatch[1].trim() : 'N/A';
+
+  // الأنواع
+  const genres = [];
+  const genreBlock = html.match(/<span>\s*النوع\s*:\s*<\/span>(.*?)<\/li>/s);
+  if (genreBlock) {
+    const genreMatches = [...genreBlock[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)];
+    for (const m of genreMatches) {
+      genres.push(decodeHTMLEntities(m[1].trim()));
+    }
+  }
+  details.genres = genres;
+
+  // الجودة
+  const qualityMatch = html.match(/<span>\s*الجودة\s*:\s*<\/span>(.*?)<\/li>/s);
+  details.quality = qualityMatch
+    ? [...qualityMatch[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => m[1].trim())
+    : [];
+
+  // الصورة المصغرة من caption
+  const imageMatch = html.match(/\[caption[^\]]*\]<img[^>]+src="([^"]+)"/);
+  details.thumbnail = imageMatch ? imageMatch[1].trim() : '';
+
+  // رابط السلسلة إن وُجد
+  const seriesMatch = html.match(/<span itemprop="title">([^<]+)<\/span><\/a><\/span>/);
+  details.seriesTitle = seriesMatch ? decodeHTMLEntities(seriesMatch[1].trim()) : '';
 
   return details;
 }
