@@ -25,56 +25,64 @@ function searchResults(html) {
 
 function extractEpisodes(html) {
   const seasons = [];
-  const seasonBlocks = [...html.matchAll(/<div class="SeasonsList">[\s\S]*?<ul>([\s\S]*?)<\/ul>/g)];
 
-  if (!seasonBlocks.length) {
-    // لا يوجد مواسم، نحاول استخراج الحلقات مباشرة
-    const episodes = [];
+  // استخراج عناوين المواسم مع data-season
+  const seasonTitleRegex = /<li[^>]*>\s*<a[^>]*data-season="(\d+)"[^>]*>([^<]+)<\/a>/g;
+  const seasonsMatches = [...html.matchAll(seasonTitleRegex)];
+
+  for (const seasonMatch of seasonsMatches) {
+    const seasonId = seasonMatch[1];
+    const seasonTitle = seasonMatch[2].trim();
+
+    // استخراج حلقات الموسم بحسب data-season الموجود في EpisodesList
+    // نبحث داخل القسم الذي يحتوي حلقات الموسم هذا
+    // في العينة المقدمة الحلقات كلها في <div class="EpisodesList"> بدون تمييز data-season
+    // لكن غالبا في صفحة كاملة يتم تغيير محتوى EpisodesList حسب الموسم المختار (Ajax)
+    // لذلك سنفترض أن الحلقات التي في HTML حالياً تخص الموسم النشط فقط.
+
+    // إذا كان HTML يحتوي حلقات لكل موسم داخل <div class="EpisodesList" data-season="..."> 
+    // يمكننا تعديل هذا، لكن حسب العينة الحلقات موجودة بدون data-season داخل EpisodesList واحدة فقط.
+
+    // لذلك، نبحث عن الحلقات داخل HTML وحاولنا فلترة حسب الموسم في الرابط (إذا ممكن)
+
+    // استخراج الحلقات من <div class="EpisodesList"> ... </div>
+    const episodesListRegex = /<div class="EpisodesList">([\s\S]*?)<\/div>/;
+    const episodesListMatch = html.match(episodesListRegex);
+    if (!episodesListMatch) continue;
+
+    const episodesHtml = episodesListMatch[1];
+
+    // استخراج حلقات مع فلترة حسب رابط الموسم (إذا الرابط يحتوي الموسم)
     const episodeRegex = /<a[^>]+href="([^"]+)"[^>]*>\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
+    const episodes = [];
     let match;
-    while ((match = episodeRegex.exec(html)) !== null) {
-      episodes.push({
-        number: match[2].trim(),
-        href: match[1].trim() + "/watch/"
-      });
+
+    while ((match = episodeRegex.exec(episodesHtml)) !== null) {
+      const href = match[1];
+      const episodeNum = match[2].trim();
+
+      // فلترة حسب الموسم: الرابط غالبًا يحتوي اسم الموسم (مثلا "الموسم-2" أو "season-2")
+      // نستخرج رقم الموسم من الرابط
+      const seasonInHrefMatch = href.match(/season[-_]?(?<seasonNum>\d+)/i);
+      const seasonNumInHref = seasonInHrefMatch ? seasonInHrefMatch.groups.seasonNum : null;
+
+      if (seasonNumInHref === null) {
+        // إذا لم نستطع تحديد الموسم من الرابط، افترض ان الحلقة تخص الموسم الأول فقط
+        if (seasonId === seasonsMatches[0][1]) {
+          episodes.push({ number: episodeNum, href });
+        }
+      } else {
+        if (seasonNumInHref === seasonId) {
+          episodes.push({ number: episodeNum, href });
+        }
+      }
     }
+
     if (episodes.length > 0) {
       episodes.sort((a, b) => parseInt(a.number) - parseInt(b.number));
-      seasons.push({ title: "الموسم 1", episodes });
+      seasons.push({ title: seasonTitle, episodes });
     }
-    return seasons;
   }
-
-  // إذا كان هناك مواسم
-  const seasonTitleRegex = /<li[^>]*>\s*<a[^>]*data-season="(\d+)"[^>]*>([^<]+)<\/a>/g;
-  const seasonTitles = [...html.matchAll(seasonTitleRegex)];
-
-  seasonTitles.forEach(season => {
-    const seasonId = season[1];
-    const seasonTitle = season[2].trim();
-    const seasonBlockRegex = new RegExp(`<div class="EpisodesList"[^>]*data-season="${seasonId}"[^>]*>([\\s\\S]*?)<\\/div>`);
-    const seasonBlockMatch = html.match(seasonBlockRegex);
-
-    if (seasonBlockMatch) {
-      const episodes = [];
-      const episodeRegex = /<a[^>]+href="([^"]+)"[^>]*>\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
-      let match;
-      while ((match = episodeRegex.exec(seasonBlockMatch[1])) !== null) {
-        episodes.push({
-          number: match[2].trim(),
-          href: match[1].trim() + "/watch/"
-        });
-      }
-
-      if (episodes.length > 0) {
-        episodes.sort((a, b) => parseInt(a.number) - parseInt(b.number));
-        seasons.push({
-          title: seasonTitle,
-          episodes: episodes
-        });
-      }
-    }
-  });
 
   return seasons;
 }
