@@ -23,64 +23,48 @@ function searchResults(html) {
     return results;
 }
 
-// دالة لاستخراج المواسم من صفحة الأنمي الرئيسية
-function extractSeasons(html) {
-  const seasons = [];
-  const seasonRegex = /<li[^>]*>\s*<a[^>]*data-season="(\d+)"[^>]*>([^<]+)<\/a>/g;
-  let match;
-  while ((match = seasonRegex.exec(html)) !== null) {
-    seasons.push({
-      id: match[1],
-      title: match[2].trim()
-    });
-  }
-  return seasons;
-}
+async function extractDetailsWithSeasons(animeMainUrl) {
+  const res = await soraFetch(animeMainUrl);
+  const html = await res.text();
 
-// دالة لاستخراج الحلقات من صفحة موسم واحد (HTML الموسم)
-function extractEpisodesFromSeasonHtml(html) {
-  const episodes = [];
-  const episodeRegex = /<a[^>]+href="([^"]+)"[^>]*>\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
-  let match;
-  while ((match = episodeRegex.exec(html)) !== null) {
-    episodes.push({
-      number: match[2].trim(),
-      href: match[1].trim()
-    });
-  }
-  episodes.sort((a, b) => parseInt(a.number) - parseInt(b.number));
-  return episodes;
-}
+  // العنوان
+  const titleMatch = html.match(/<h1 class="Title">(.*?)<\/h1>/);
+  const title = titleMatch ? decodeHTMLEntities(titleMatch[1].trim()) : "No Title";
 
-// دالة رئيسية لجلب جميع الحلقات لكل المواسم
-async function fetchAllSeasonsEpisodes(animeMainUrl) {
-  // 1. جلب صفحة الأنمي الرئيسية
-  const mainRes = await fetch(animeMainUrl);
-  const mainHtml = await mainRes.text();
+  // الصورة
+  const imgMatch = html.match(/class="poster" style="background-image:\s*url\(([^)]+)\)/);
+  const image = imgMatch ? imgMatch[1].trim() : "";
 
-  // 2. استخراج المواسم
-  const seasons = extractSeasons(mainHtml);
+  // الوصف
+  const descMatch = html.match(/<div class="Description[^>]*">\s*<p>([\s\S]*?)<\/p>/);
+  const description = descMatch ? decodeHTMLEntities(descMatch[1].trim()) : "";
 
-  // 3. جلب الحلقات لكل موسم
-  const allSeasonsData = [];
-  for (const season of seasons) {
-    // هنا لازم تكون عندك طريقة لبناء رابط صفحة الموسم حسب id الموسم
-    // غالبا الرابط بيكون نفس الرابط مع إضافة باراميتر season مثلاً:
-    // https://ristoanime.net/series/انمي-jujutsu-kaisen/?season=3107
-    const seasonUrl = `${animeMainUrl}?season=${season.id}`;
-
-    const seasonRes = await fetch(seasonUrl);
-    const seasonHtml = await seasonRes.text();
-
-    const episodes = extractEpisodesFromSeasonHtml(seasonHtml);
-
-    allSeasonsData.push({
-      title: season.title,
-      episodes
-    });
+  // النوع (genres)
+  const genres = [];
+  const genreRegex = /<span class="genre">([^<]+)<\/span>/g;
+  let genreMatch;
+  while ((genreMatch = genreRegex.exec(html)) !== null) {
+    genres.push(genreMatch[1].trim());
   }
 
-  return allSeasonsData; // مصفوفة من المواسم مع الحلقات
+  // تاريخ العرض
+  let releaseDate = "";
+  const dateMatch = html.match(/تاريخ العرض[^<]*<\/strong>\s*<\/span>\s*([^<]+)<\/li>/);
+  if (dateMatch) {
+    releaseDate = dateMatch[1].trim();
+  }
+
+  // المواسم والحلقات
+  const seasons = await fetchAllSeasonsEpisodes(animeMainUrl);
+
+  return {
+    title,
+    image,
+    description,
+    genres,
+    releaseDate,
+    seasons
+  };
 }
 
 function extractEpisodes(html) {
