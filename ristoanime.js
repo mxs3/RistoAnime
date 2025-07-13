@@ -74,23 +74,44 @@ function extractEpisodes(html) {
 async function extractStreamUrl(html) {
     if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
 
-    const serverMatch = html.match(/<li[^>]+data-watch="([^"]+mp4upload\.com[^"]+)"/);
-    const embedUrl = serverMatch ? serverMatch[1].trim() : 'N/A';
+    const multiStreams = { streams: [], subtitles: null };
 
-    let streamUrl = "";
+    const serverMatch = html.match(/<li[^>]+data-watch="([^"]+)"/);
+    const embedUrl = serverMatch ? serverMatch[1].trim() : '';
 
-    if (embedUrl !== 'N/A') {
-        const response = await soraFetch(embedUrl);
-        const fetchedHtml = await response.text();
-        
-        const streamMatch = fetchedHtml.match(/player\.src\(\{\s*type:\s*["']video\/mp4["'],\s*src:\s*["']([^"']+)["']\s*\}\)/i);
+    if (!embedUrl) return JSON.stringify(multiStreams);
+
+    try {
+        const response = await soraFetch(embedUrl, {
+            headers: {
+                'Referer': embedUrl,
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
+            }
+        });
+        const embedHtml = await response.text();
+
+        // يدعم mp4upload و vidmoly وغيره حسب شكل الكود
+        let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
+                          || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
+
         if (streamMatch) {
-            streamUrl = streamMatch[1].trim();
+            const videoUrl = streamMatch[1].trim();
+
+            multiStreams.streams.push({
+                title: "Main Server",
+                streamUrl: videoUrl,
+                headers: {
+                    "Referer": embedUrl,
+                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+                },
+                subtitles: null
+            });
         }
+    } catch (err) {
+        console.error("extractStreamUrl error:", err);
     }
 
-    console.log(streamUrl);
-    return streamUrl;
+    return JSON.stringify(multiStreams);
 }
 
 function decodeHTMLEntities(text) {
