@@ -12,14 +12,14 @@ function searchResults(html) {
 
         if (hrefMatch && titleMatch && imgMatch) {
             const href = hrefMatch[1].trim();
-            const title = titleMatch[1].trim();
+            const fullTitle = decodeHTMLEntities(titleMatch[1].trim());
+            const title = fullTitle.replace(/[\u0600-\u06FF]+/g, '').replace(/\s+/g, ' ').trim();
             const image = imgMatch[1].trim();
 
             results.push({ title, image, href });
         }
     });
 
-    console.log(results);
     return results;
 }
 
