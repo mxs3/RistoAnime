@@ -24,40 +24,35 @@ function searchResults(html) {
 }
 
 function decodeHTMLEntities(text) {
-    return text.replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec))
-               .replace(/&quot;/g, '"')
-               .replace(/&amp;/g, '&')
-               .replace(/&apos;/g, "'")
-               .replace(/&lt;/g, '<')
-               .replace(/&gt;/g, '>');
+  return text
+    .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec))
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
 }
 
 function extractDetails(html) {
-    const details = {};
+  const details = {};
 
-    // الوصف
-    const descriptionMatch = html.match(/<div class="StoryArea">.*?<p[^>]*>(.*?)<\/p>/s);
-    details.description = descriptionMatch
-        ? decodeHTMLEntities(descriptionMatch[1].trim())
-        : 'N/A';
+  // الوصف
+  const descriptionMatch = html.match(/<div class="StoryArea">.*?<p>(.*?)<\/p>/s);
+  details.description = descriptionMatch ? decodeHTMLEntities(descriptionMatch[1].trim()) : 'N/A';
 
-    // مدة العرض (alias)
-    const aliasMatch = html.match(/<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>\s*([^<]+)\s*<\/a>/);
-    details.alias = aliasMatch ? aliasMatch[1].trim() : 'N/A';
+  // العنوان الإنجليزي
+  const titleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>(.*?)<\/a>/);
+  details.englishTitle = titleMatch ? decodeHTMLEntities(titleMatch[1].trim()) : 'N/A';
 
-    // تاريخ العرض (airdate)
-    const airdateMatch = html.match(/<span>\s*عرض من\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-    details.airdate = airdateMatch ? airdateMatch[1].trim() : 'N/A';
+  // تاريخ العرض
+  const airedDateMatch = html.match(/<span>\s*عرض من\s*:\s*<\/span>\s*<a[^>]*>(.*?)<\/a>/);
+  details.airedDate = airedDateMatch ? airedDateMatch[1].trim() : 'N/A';
 
-    // العنوان الانجليزي (اختياري)
-    const titleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-    details.englishTitle = titleMatch ? titleMatch[1].trim() : 'N/A';
+  // الصورة المصغرة للحلقة (داخل caption)
+  const thumbMatch = html.match(/\[caption[^\]]*\]<img[^>]+src="([^"]+)"[^>]*>/);
+  details.thumbnail = thumbMatch ? thumbMatch[1].trim() : '';
 
-    // الصورة المصغرة (thumbnail)
-    const thumbMatch = html.match(/<img[^>]+src="([^"]+\/poster-anime[^"]+\.webp)"/);
-    details.thumbnail = thumbMatch ? thumbMatch[1].trim() : null;
-
-    return details;
+  return details;
 }
 
 async function extractStreamUrl(html) {
