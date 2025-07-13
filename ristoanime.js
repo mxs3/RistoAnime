@@ -106,11 +106,66 @@ async function extractStreamUrl(html) {
 
     const multiStreams = { streams: [], subtitles: null };
 
+    // 1. استخراج رابط السيرفر embedUrl
     const serverMatch = html.match(/<li[^>]+data-watch="([^"]+)"/);
-    const embedUrl = serverMatch ? serverMatch[1].trim() : '';
+    let embedUrl = serverMatch ? serverMatch[1].trim() : '';
 
     if (!embedUrl) return JSON.stringify(multiStreams);
 
+    // 2. لو رابط Sibnet مباشر
+    if (embedUrl.includes('video.sibnet.ru')) {
+        try {
+            const response = await soraFetch(embedUrl, {
+                headers: {
+                    'Referer': embedUrl,
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
+                }
+            });
+            const sibnetHtml = await response.text();
+
+            // بحث عن رابط m3u8 في sibnetHtml
+            // غالبًا الرابط يكون داخل JSON أو متغيرات جافا سكريبت
+            const m3u8Match = sibnetHtml.match(/"url"\s*:\s*"([^"]+\.m3u8)"/i);
+
+            if (m3u8Match) {
+                const m3u8Url = m3u8Match[1].replace(/\\\//g, '/'); // إزالة الـ escape إذا وجد
+
+                multiStreams.streams.push({
+                    title: "Sibnet - Auto Quality",
+                    streamUrl: m3u8Url,
+                    headers: {
+                        "Referer": embedUrl,
+                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+                    },
+                    subtitles: null
+                });
+
+                return JSON.stringify(multiStreams);
+            }
+
+            // إذا لم نجد m3u8، حاول إيجاد mp4
+            const mp4Match = sibnetHtml.match(/"url"\s*:\s*"([^"]+\.mp4)"/i);
+            if (mp4Match) {
+                const mp4Url = mp4Match[1].replace(/\\\//g, '/');
+                multiStreams.streams.push({
+                    title: "Sibnet - MP4",
+                    streamUrl: mp4Url,
+                    headers: {
+                        "Referer": embedUrl,
+                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+                    },
+                    subtitles: null
+                });
+                return JSON.stringify(multiStreams);
+            }
+        } catch (e) {
+            console.error('Error fetching Sibnet video:', e);
+        }
+        // لو فشل أو لم نجد روابط، رجع فارغ
+        return JSON.stringify(multiStreams);
+    }
+
+    // 3. كود دعم الجودات القديمة + سيرفرات أخرى (mp4upload, vidmoly...)
     try {
         const response = await soraFetch(embedUrl, {
             headers: {
@@ -120,23 +175,18 @@ async function extractStreamUrl(html) {
         });
         const embedHtml = await response.text();
 
-        // 1. جرب استخراج جودات متعددة (mp4 أو m3u8) — حسب تنسيقات شائعة
-        // مثال: sources: [{file: 'url', label: '720p'}, {...}]
+        // دعم الجودات
         const sourcesMatch = embedHtml.match(/sources:\s*(\[[^\]]+\])/i);
-
         if (sourcesMatch) {
             let sources = [];
             try {
-                // تحويل نص المصفوفة إلى JSON صالح (مع بعض التنظيف البسيط)
                 const jsonStr = sourcesMatch[1]
                     .replace(/file:/g, '"file":')
                     .replace(/label:/g, '"label":')
                     .replace(/type:/g, '"type":')
                     .replace(/'/g, '"');
-
                 sources = JSON.parse(jsonStr);
-            } catch(e) {
-                // إذا فشل التحويل، نترك sources فارغة ونتابع الطريقة القديمة
+            } catch (e) {
                 console.warn("Failed to parse sources JSON:", e);
             }
 
@@ -159,10 +209,10 @@ async function extractStreamUrl(html) {
             }
         }
 
-        // 2. إذا ما فيش جودات، استخدم الطريقة القديمة (رابط واحد)
+        // إذا ما فيش جودات، استخدام الرابط الوحيد القديم
         let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
-                          || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i)
-                          || embedHtml.match(/source\s*src=['"]([^'"]+)['"]/i);
+            || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i)
+            || embedHtml.match(/source\s*src=['"]([^'"]+)['"]/i);
 
         if (streamMatch) {
             const videoUrl = streamMatch[1].trim();
