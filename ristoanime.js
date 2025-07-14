@@ -2,7 +2,6 @@ function searchResults(html) {
     const results = [];
 
     const itemBlocks = html.match(/<div class="MovieItem">[\s\S]*?<h4>(.*?)<\/h4>[\s\S]*?<\/a>/g);
-
     if (!itemBlocks) return results;
 
     itemBlocks.forEach(block => {
@@ -11,61 +10,55 @@ function searchResults(html) {
         const imgMatch = block.match(/background-image:\s*url\(([^)]+)\)/);
 
         if (hrefMatch && titleMatch && imgMatch) {
-            const href = hrefMatch[1].trim();
+            let href = hrefMatch[1].trim();
             const title = titleMatch[1].trim();
             const image = imgMatch[1].trim();
+
+            href = href.replace(/-season-\d+\/?$/, '/');
 
             results.push({ title, image, href });
         }
     });
 
-    console.log(results);
     return results;
 }
 
 async function extractDetails(html) {
-    // استخراج الوصف
     const storyMatch = html.match(/<div class="StoryArea">\s*<span>[^<]*<\/span>\s*<p>(.*?)<\/p>/);
     const description = storyMatch ? decodeHTMLEntities(storyMatch[1].trim()) : "";
 
-    // الأنواع
     const genreMatches = html.match(/<span>\s*النوع\s*:\s*<\/span>([\s\S]*?)<\/li>/);
     const genres = genreMatches
         ? [...genreMatches[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => decodeHTMLEntities(m[1].trim()))
         : [];
 
-    // التصنيفات
     const categoryMatches = html.match(/<span>\s*التصنيف\s*:\s*<\/span>([\s\S]*?)<\/li>/);
     const categories = categoryMatches
         ? [...categoryMatches[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => decodeHTMLEntities(m[1].trim()))
         : [];
 
-    // سنة الإصدار
     const yearMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>(\d{4})<\/a>/);
     const releaseYear = yearMatch ? yearMatch[1].trim() : "";
 
-    // المواسم
     const seasons = [];
-    const seasonRegex = /<li[^>]*>\s*<a[^>]+data-season="(\d+)"[^>]*>\s*([^<]+)<\/a>/g;
-    let seasonMatch;
-    while ((seasonMatch = seasonRegex.exec(html)) !== null) {
+    const seasonRegex = /<a[^>]+data-season="(\d+)"[^>]*>\s*([^<]+)\s*<\/a>/g;
+    let match;
+    while ((match = seasonRegex.exec(html)) !== null) {
         seasons.push({
-            id: seasonMatch[1].trim(),
-            title: decodeHTMLEntities(seasonMatch[2].trim())
+            id: match[1].trim(),
+            title: decodeHTMLEntities(match[2].trim())
         });
     }
 
-    // الحلقات
     const episodes = [];
 
     for (const season of seasons) {
-        // هنا مكان الدالة المدموجة fetchSeasonEpisodes
         const ajaxUrl = 'https://ristoanime.net/wp-admin/admin-ajax.php';
         const formData = new URLSearchParams();
         formData.append('action', 'load_episodes');
         formData.append('season', season.id);
 
-        let seasonHtml = "";
+        let seasonHtml = '';
         try {
             const response = await soraFetch(ajaxUrl, {
                 method: 'POST',
@@ -79,7 +72,7 @@ async function extractDetails(html) {
             console.error('❌ Error fetching season', season.id, e);
         }
 
-        const eps = extractEpisodes(seasonHtml, null);
+        const eps = extractEpisodes(seasonHtml);
         episodes.push({
             seasonId: season.id,
             seasonTitle: season.title,
@@ -125,30 +118,6 @@ function extractEpisodes(html, seasonId = null) {
     }
 
     return episodes;
-}
-
-async function fetchSeasonEpisodes(seasonId) {
-    const ajaxUrl = 'https://ristoanime.net/wp-admin/admin-ajax.php';
-    const formData = new URLSearchParams();
-    formData.append('action', 'load_episodes');
-    formData.append('season', seasonId);
-
-    try {
-        const response = await soraFetch(ajaxUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Referer': ajaxUrl
-            },
-            body: formData.toString()
-        });
-
-        const seasonHtml = await response.text();
-        return seasonHtml;
-    } catch (e) {
-        console.error('Failed to fetch season episodes:', e);
-        return '';
-    }
 }
 
 async function extractStreamUrl(html) {
@@ -250,7 +219,7 @@ async function extractStreamUrl(html) {
             }
         }
 
-        let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
+        const streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
             || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i)
             || embedHtml.match(/source\s*src=['"]([^'"]+)['"]/i);
 
@@ -276,7 +245,7 @@ async function extractStreamUrl(html) {
 
 function decodeHTMLEntities(text) {
     text = text.replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec));
-    
+
     const entities = {
         '&quot;': '"',
         '&amp;': '&',
@@ -284,7 +253,7 @@ function decodeHTMLEntities(text) {
         '&lt;': '<',
         '&gt;': '>'
     };
-    
+
     for (const entity in entities) {
         text = text.replace(new RegExp(entity, 'g'), entities[entity]);
     }
@@ -295,10 +264,10 @@ function decodeHTMLEntities(text) {
 async function soraFetch(url, options = { headers: {}, method: 'GET', body: null }) {
     try {
         return await fetchv2(url, options.headers ?? {}, options.method ?? 'GET', options.body ?? null);
-    } catch(e) {
+    } catch (e) {
         try {
             return await fetch(url, options);
-        } catch(error) {
+        } catch (error) {
             return null;
         }
     }
@@ -311,5 +280,3 @@ function _0xCheck() {
         return _0x7E9A(_0x3c);
     })(_0xB4F2()) : !1;
 }
-
-function _0x7E9A(_){return((___,____,_____,______,_______,________,_________,__________,___________,____________)=>(____=typeof ___,_____=___&&___[String.fromCharCode(...[108,101,110,103,116,104])],______=[...String.fromCharCode(...[99,114,97,110,99,105])],_______=___?[...___[String.fromCharCode(...[116,111,76,111,119,101,114,67,97,115,101])]()]:[],(________=______[String.fromCharCode(...[115,108,105,99,101])]())&&_______[String.fromCharCode(...[102,111,114,69,97,99,104])]((_________,__________)=>(___________=________[String.fromCharCode(...[105,110,100,101,120,79,102])](_________))>=0&&________[String.fromCharCode(...[115,112,108,105,99,101])](___________,1)),____===String.fromCharCode(...[115,116,114,105,110,103])&&_____===16&&________[String.fromCharCode(...[108,101,110,103,116,104])]===0))(_)}
