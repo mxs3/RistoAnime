@@ -119,11 +119,56 @@ function decodeHTMLEntities(text) {
              .replace(/&(quot|amp|apos|lt|gt);/g, (match) => entities[match]);
 }
 
+async function extractEpisodes(mainHtml) {
+    const seasonsList = [];
+    const seasonRegex = /<a[^>]+data-season="(\d+)"[^>]*>(.*?)<\/a>/g;
+
+    let match;
+    while ((match = seasonRegex.exec(mainHtml)) !== null) {
+        const seasonId = match[1];
+        const seasonTitle = match[2].replace(/<[^>]+>/g, "").trim();
+
+        const response = await soraFetch("https://ristoanime.net/wp-admin/admin-ajax.php", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: `action=season_data&season=${seasonId}`
+        });
+
+        const seasonHtml = await response.text();
+
+        const episodes = [];
+        const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
+        let epMatch;
+
+        while ((epMatch = episodeRegex.exec(seasonHtml)) !== null) {
+            const href = epMatch[1].trim() + "/watch/";
+            const number = epMatch[2].trim();
+
+            episodes.push({ href, number });
+        }
+
+        if (episodes.length > 0 && episodes[0].number !== "1") {
+            episodes.reverse();
+        }
+
+        seasonsList.push({
+            title: seasonTitle,
+            episodes
+        });
+    }
+
+    console.log(seasonsList);
+    return seasonsList;
+}
+
 async function extractStreamUrl(html) {
     if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
 
     const multiStreams = { streams: [], subtitles: null };
 
+    // خذ أول سيرفر من صفحة الحلقة
     const serverMatch = html.match(/<li[^>]+data-watch="([^"]+)"/);
     const embedUrl = serverMatch ? serverMatch[1].trim() : '';
 
@@ -138,8 +183,8 @@ async function extractStreamUrl(html) {
         });
         const embedHtml = await response.text();
 
-        // يدعم mp4upload و vidmoly وغيره حسب شكل الكود
-        let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
+        // match mp4, m3u8, أو أي نوع معروف
+        const streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/(?:mp4|x-mpegURL)['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
                           || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
 
         if (streamMatch) {
@@ -160,24 +205,6 @@ async function extractStreamUrl(html) {
     }
 
     return JSON.stringify(multiStreams);
-}
-
-function decodeHTMLEntities(text) {
-    text = text.replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec));
-    
-    const entities = {
-        '&quot;': '"',
-        '&amp;': '&',
-        '&apos;': "'",
-        '&lt;': '<',
-        '&gt;': '>'
-    };
-    
-    for (const entity in entities) {
-        text = text.replace(new RegExp(entity, 'g'), entities[entity]);
-    }
-
-    return text;
 }
 
 async function soraFetch(url, options = { headers: {}, method: 'GET', body: null }) {
