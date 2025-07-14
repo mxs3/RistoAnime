@@ -2,6 +2,7 @@ function searchResults(html) {
     const results = [];
 
     const itemBlocks = html.match(/<div class="MovieItem">[\s\S]*?<h4>(.*?)<\/h4>[\s\S]*?<\/a>/g);
+
     if (!itemBlocks) return results;
 
     itemBlocks.forEach(block => {
@@ -10,16 +11,15 @@ function searchResults(html) {
         const imgMatch = block.match(/background-image:\s*url\(([^)]+)\)/);
 
         if (hrefMatch && titleMatch && imgMatch) {
-            let href = hrefMatch[1].trim();
+            const href = hrefMatch[1].trim();
             const title = titleMatch[1].trim();
             const image = imgMatch[1].trim();
-
-            href = href.replace(/-season-\d+\/?$/, '/');
 
             results.push({ title, image, href });
         }
     });
 
+    console.log(results);
     return results;
 }
 
