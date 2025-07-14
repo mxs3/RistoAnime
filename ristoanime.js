@@ -110,75 +110,37 @@ async function extractStreamUrl(html) {
 
     const multiStreams = { streams: [], subtitles: null };
 
-    const serverMatch = html.match(/<li[^>]+data-watch="([^"]+)"/);
-    const embedUrl = serverMatch ? serverMatch[1].trim() : '';
-    if (!embedUrl) return JSON.stringify(multiStreams);
+    // اجلب كل روابط السيرفرات
+    const serverMatches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
 
-    try {
-        const response = await soraFetch(embedUrl, {
-            headers: {
-                'Referer': embedUrl,
-                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
-            }
-        });
-        const embedHtml = await response.text();
+    if (!serverMatches || serverMatches.length === 0) return JSON.stringify(multiStreams);
 
-        // استخراج رابط HLS
-        let hlsMatch = embedHtml.match(/['"](https?:\/\/[^'"]+\.m3u8[^'"]*)['"]/i);
-        if (hlsMatch) {
-            const hlsUrl = hlsMatch[1].trim();
-
-            // محاولة جلب محتوى m3u8 وتحليل الجودات
-            const m3u8Res = await soraFetch(hlsUrl, {
+    for (const match of serverMatches) {
+        const embedUrl = match[1].trim();
+        try {
+            const response = await soraFetch(embedUrl, {
                 headers: {
                     'Referer': embedUrl,
                     'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
                 }
             });
-            const m3u8Text = await m3u8Res.text();
+            const embedHtml = await response.text();
 
-            const variantRegex = /#EXT-X-STREAM-INF:[^\n]*RESOLUTION=\d+x(\d+)[^\n]*\n([^\n]+)/g;
-            let match;
-            const foundQualities = [];
+            let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
+                              || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
 
-            while ((match = variantRegex.exec(m3u8Text)) !== null) {
-                const quality = match[1] + "p";
-                const streamUrl = new URL(match[2].trim(), hlsUrl).href;
+            if (streamMatch) {
+                const videoUrl = streamMatch[1].trim();
 
-                foundQualities.push({
-                    title: quality,
-                    streamUrl: streamUrl,
-                    headers: {
-                        "Referer": embedUrl,
-                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-                    },
-                    subtitles: null
-                });
-            }
+                // اسم السيرفر بناءً على الرابط
+                let serverName = '';
+                if (embedUrl.includes('vidmoly')) serverName = 'Vidmoly';
+                else if (embedUrl.includes('mp4upload')) serverName = 'Mp4Upload';
+                else if (embedUrl.includes('streamtape')) serverName = 'Streamtape';
+                else serverName = 'Server';
 
-            // لو فيه جودات متعددة أضفها، وإلا أضف الملف الأصلي فقط
-            if (foundQualities.length > 0) {
-                multiStreams.streams = foundQualities;
-            } else {
                 multiStreams.streams.push({
-                    title: "Auto",
-                    streamUrl: hlsUrl,
-                    headers: {
-                        "Referer": embedUrl,
-                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-                    },
-                    subtitles: null
-                });
-            }
-        } else {
-            // fallback إلى MP4 إن لم يوجد HLS
-            let mp4Match = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
-                        || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
-
-            if (mp4Match) {
-                const videoUrl = mp4Match[1].trim();
-                multiStreams.streams.push({
-                    title: "MP4 Stream",
+                    title: serverName,
                     streamUrl: videoUrl,
                     headers: {
                         "Referer": embedUrl,
@@ -187,9 +149,10 @@ async function extractStreamUrl(html) {
                     subtitles: null
                 });
             }
+        } catch (err) {
+            console.error("Error fetching stream from:", embedUrl, err);
+            continue;
         }
-    } catch (err) {
-        console.error("extractStreamUrl error:", err);
     }
 
     return JSON.stringify(multiStreams);
