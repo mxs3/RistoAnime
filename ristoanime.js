@@ -110,37 +110,41 @@ async function extractStreamUrl(html) {
 
     const multiStreams = { streams: [], subtitles: null };
 
-    // اجلب كل روابط السيرفرات
-    const serverMatches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
+    const serverMatch = html.match(/<li[^>]+data-watch="([^"]+)"/);
+    const embedUrl = serverMatch ? serverMatch[1].trim() : '';
+    if (!embedUrl) return JSON.stringify(multiStreams);
 
-    if (!serverMatches || serverMatches.length === 0) return JSON.stringify(multiStreams);
+    try {
+        const response = await soraFetch(embedUrl, {
+            headers: {
+                'Referer': embedUrl,
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
+            }
+        });
+        const embedHtml = await response.text();
 
-    for (const match of serverMatches) {
-        const embedUrl = match[1].trim();
-        try {
-            const response = await soraFetch(embedUrl, {
+        // محاولة استخراج HLS أولاً (.m3u8)
+        let hlsMatch = embedHtml.match(/['"](https?:\/\/[^'"]+\.m3u8[^'"]*)['"]/i);
+        if (hlsMatch) {
+            const hlsUrl = hlsMatch[1].trim();
+            multiStreams.streams.push({
+                title: "HLS Stream",
+                streamUrl: hlsUrl,
                 headers: {
-                    'Referer': embedUrl,
-                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
-                }
+                    "Referer": embedUrl,
+                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+                },
+                subtitles: null
             });
-            const embedHtml = await response.text();
+        } else {
+            // fallback إلى MP4 إن لم يتوفر HLS
+            let mp4Match = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
+                        || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
 
-            let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
-                              || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
-
-            if (streamMatch) {
-                const videoUrl = streamMatch[1].trim();
-
-                // اسم السيرفر بناءً على الرابط
-                let serverName = '';
-                if (embedUrl.includes('vidmoly')) serverName = 'Vidmoly';
-                else if (embedUrl.includes('mp4upload')) serverName = 'Mp4Upload';
-                else if (embedUrl.includes('streamtape')) serverName = 'Streamtape';
-                else serverName = 'Server';
-
+            if (mp4Match) {
+                const videoUrl = mp4Match[1].trim();
                 multiStreams.streams.push({
-                    title: serverName,
+                    title: "MP4 Stream",
                     streamUrl: videoUrl,
                     headers: {
                         "Referer": embedUrl,
@@ -149,10 +153,9 @@ async function extractStreamUrl(html) {
                     subtitles: null
                 });
             }
-        } catch (err) {
-            console.error("Error fetching stream from:", embedUrl, err);
-            continue;
         }
+    } catch (err) {
+        console.error("extractStreamUrl error:", err);
     }
 
     return JSON.stringify(multiStreams);
