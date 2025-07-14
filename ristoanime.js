@@ -24,24 +24,25 @@ function searchResults(html) {
 }
 
 async function extractDetails(html) {
-    const storyMatch = html.match(/<div class="StoryArea">\s*<span>[^<]*<\/span>\s*<p>(.*?)<\/p>/);
-    const description = storyMatch ? decodeHTMLEntities(storyMatch[1].trim()) : "";
+    const details = [];
 
-    const genreMatches = html.match(/<span>\s*النوع\s*:\s*<\/span>([\s\S]*?)<\/li>/);
-    const genres = genreMatches
-        ? [...genreMatches[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => decodeHTMLEntities(m[1].trim()))
-        : [];
+    // الوصف
+    const descriptionMatch = html.match(/<p[^>]*>(.*?)<\/p>/s);
+    const description = descriptionMatch 
+        ? decodeHTMLEntities(descriptionMatch[1].trim()) 
+        : 'N/A';
 
-    const categoryMatches = html.match(/<span>\s*التصنيف\s*:\s*<\/span>([\s\S]*?)<\/li>/);
-    const categories = categoryMatches
-        ? [...categoryMatches[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => decodeHTMLEntities(m[1].trim()))
-        : [];
+    // مدة العرض (alias)
+    const aliasMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-clock"><\/i>\s*<\/div>\s*<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>\s*(\d+)\s*<\/a>/);
+    const alias = aliasMatch ? aliasMatch[1].trim() : 'N/A';
 
-    const yearMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>(\d{4})<\/a>/);
-    const releaseYear = yearMatch ? yearMatch[1].trim() : "";
+    // تاريخ الإصدار
+    const airdateMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-calendar"><\/i>\s*<\/div>\s*<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*?>\s*(\d{4})\s*<\/a>/);
+    const airdate = airdateMatch ? airdateMatch[1].trim() : 'N/A';
 
+    // استخراج المواسم من أزرار المواسم
     const seasons = [];
-    const seasonRegex = /<a[^>]+data-season="(\d+)"[^>]*>\s*([^<]+)\s*<\/a>/g;
+    const seasonRegex = /<a[^>]+data-season="(\d+)"[^>]*>([^<]+)<\/a>/g;
     let match;
     while ((match = seasonRegex.exec(html)) !== null) {
         seasons.push({
@@ -50,27 +51,43 @@ async function extractDetails(html) {
         });
     }
 
-    const episodes = [];
-
+    // استخراج الحلقات لكل موسم
+    const episodesBySeason = [];
     for (const season of seasons) {
-        const ajaxUrl = 'https://ristoanime.net/wp-admin/admin-ajax.php';
         const formData = new URLSearchParams();
-        formData.append('action', 'load_episodes');
-        formData.append('season', season.id);
+        formData.append("action", "season_data");
+        formData.append("season_id", season.id);
 
-        let seasonHtml = '';
         try {
-            const response = await soraFetch(ajaxUrl, {
-                method: 'POST',
+            const res = await fetch("https://ristoanime.net/wp-admin/admin-ajax.php", {
+                method: "POST",
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
+                    "Content-Type": "application/x-www-form-urlencoded"
                 },
                 body: formData.toString()
             });
-            seasonHtml = await response.text();
-        } catch (e) {
-            console.error('❌ Error fetching season', season.id, e);
+
+            const seasonHtml = await res.text();
+            const episodes = extractEpisodes(seasonHtml);
+            episodesBySeason.push({
+                seasonTitle: season.title,
+                episodes: episodes
+            });
+        } catch (err) {
+            console.error(`Error loading season ${season.id}`, err);
         }
+    }
+
+    details.push({
+        description: description,
+        alias: alias,
+        airdate: airdate,
+        seasons: episodesBySeason
+    });
+
+    console.log(details);
+    return details;
+}
 
         const eps = extractEpisodes(seasonHtml);
         episodes.push({
