@@ -11,7 +11,7 @@
     "language": "Arabic",
     "streamType": "MP4",
     "quality": "auto",
-    "baseUrl": "https://www.mp4upload.com/",
+    "baseUrl": "https://vidmoly.me/",
     "searchBaseUrl": "https://ristoanime.net/?s=%s",
     "scriptUrl": "https://raw.githubusercontent.com/mxs3/RistoAnime/refs/heads/main/ristoanime.js",
     "type": "anime",
