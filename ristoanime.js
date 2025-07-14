@@ -24,22 +24,27 @@ function searchResults(html) {
 }
 
 async function extractDetails(html) {
+    // استخراج الوصف
     const storyMatch = html.match(/<div class="StoryArea">\s*<span>[^<]*<\/span>\s*<p>(.*?)<\/p>/);
     const description = storyMatch ? decodeHTMLEntities(storyMatch[1].trim()) : "";
 
+    // الأنواع
     const genreMatches = html.match(/<span>\s*النوع\s*:\s*<\/span>([\s\S]*?)<\/li>/);
     const genres = genreMatches
         ? [...genreMatches[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => decodeHTMLEntities(m[1].trim()))
         : [];
 
+    // التصنيفات
     const categoryMatches = html.match(/<span>\s*التصنيف\s*:\s*<\/span>([\s\S]*?)<\/li>/);
     const categories = categoryMatches
         ? [...categoryMatches[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => decodeHTMLEntities(m[1].trim()))
         : [];
 
+    // سنة الإصدار
     const yearMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>(\d{4})<\/a>/);
     const releaseYear = yearMatch ? yearMatch[1].trim() : "";
 
+    // المواسم
     const seasons = [];
     const seasonRegex = /<li[^>]*>\s*<a[^>]+data-season="(\d+)"[^>]*>\s*([^<]+)<\/a>/g;
     let seasonMatch;
@@ -50,16 +55,35 @@ async function extractDetails(html) {
         });
     }
 
+    // الحلقات
     const episodes = [];
+
     for (const season of seasons) {
-        let seasonHtml = html;
-        if (season.id !== "1") {
-            seasonHtml = await fetchSeasonEpisodes(season.id);
+        // هنا مكان الدالة المدموجة fetchSeasonEpisodes
+        const ajaxUrl = 'https://ristoanime.net/wp-admin/admin-ajax.php';
+        const formData = new URLSearchParams();
+        formData.append('action', 'load_episodes');
+        formData.append('season', season.id);
+
+        let seasonHtml = "";
+        try {
+            const response = await soraFetch(ajaxUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: formData.toString()
+            });
+            seasonHtml = await response.text();
+        } catch (e) {
+            console.error('❌ Error fetching season', season.id, e);
         }
+
+        const eps = extractEpisodes(seasonHtml, null);
         episodes.push({
             seasonId: season.id,
             seasonTitle: season.title,
-            episodes: extractEpisodes(seasonHtml, null)
+            episodes: eps
         });
     }
 
