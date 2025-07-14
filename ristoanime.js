@@ -41,91 +41,82 @@ function decodeHTMLEntities(text) {
         .replace(/&amp;/g, '&');
 }
 
-function extractDetails(html) {
-    const decode = decodeHTMLEntities;
-    const details = {};
+async function extractDetails(url) {
+  const response = await soraFetch(url);
+  const html = await response.text();
 
-    // استخراج الوصف
-    const descMatch = html.match(/<div class="EntryContent">[\s\S]*?<p[^>]*>(.*?)<\/p>/);
-    details.description = descMatch ? decode(descMatch[1].trim()) : 'No description';
+  // استخراج الوصف
+  const descMatch = html.match(/<p[^>]*>(.*?)<\/p>/s);
+  const description = descMatch ? decodeHTMLEntities(descMatch[1].trim()) : 'N/A';
 
-    // استخراج الصورة الرئيسية
-    const imgMatch = html.match(/<img class="[^"]*wp-image[^"]*"[^>]+src="([^"]+)"/);
-    details.image = imgMatch ? imgMatch[1].trim() : null;
+  // استخراج الصورة
+  const imgMatch = html.match(/<img[^>]+src="([^"]+)"[^>]+class="size-medium[^"]*"/);
+  const poster = imgMatch ? imgMatch[1] : null;
 
-    // استخراج تاريخ العرض
-    const dateMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-calendar"><\/i>[\s\S]*?<a[^>]*>(\d{4})<\/a>/);
-    details.airdate = dateMatch ? dateMatch[1].trim() : 'N/A';
+  // استخراج تاريخ الإصدار (السنة فقط)
+  const yearMatch = html.match(/<li[^>]*>\s*<div class="icon">\s*<i class="far fa-calendar"><\/i>\s*<\/div>\s*<span>تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>\s*(\d{4})\s*<\/a>/);
+  const year = yearMatch ? yearMatch[1].trim() : null;
 
-    // استخراج التصنيفات
-    const genreMatches = [...html.matchAll(/<li data-get="related" data-term="\d+">[\s\S]*?<span>([^<]+)<\/span>/g)];
-    details.genres = genreMatches.map(g => g[1].trim()).filter(g => !["مقترح لك", "مسلسلات انمي", "1080p"].includes(g));
+  // استخراج قائمة المواسم
+  const seasons = [];
+  const seasonRegex = /<a class="no-ajax" data-season="(\d+)"[^>]*>([^<]+)<\/a>/g;
+  let seasonMatch;
+  while ((seasonMatch = seasonRegex.exec(html)) !== null) {
+    const seasonId = seasonMatch[1];
+    const seasonName = decodeHTMLEntities(seasonMatch[2].trim());
 
-    // استخراج المواسم
-    const seasonsBlock = html.match(/<div class="SeasonsList">[\s\S]*?<\/ul>/);
-    const seasons = [];
+    // فيتش للحلقات الخاصة بالموسم
+    const seasonResponse = await soraFetch("https://ristoanime.net/wp-admin/admin-ajax.php", {
+      method: "POST",
+      body: `action=season_data&season=${seasonId}`,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      }
+    });
+    const seasonHtml = await seasonResponse.text();
 
-    if (seasonsBlock) {
-        const seasonItems = [...seasonsBlock[0].matchAll(/data-season="(\d+)".*?>(.*?)<\/a>/g)];
+    // استخراج الحلقات من الموسم
+    const episodes = [];
+    const episodeRegex = /<a[^>]+href="([^"]+)"[^>]*>\s*الحلقة\s*<em>(\d+)<\/em>/g;
+    let episodeMatch;
+    while ((episodeMatch = episodeRegex.exec(seasonHtml)) !== null) {
+      const epUrl = episodeMatch[1].trim() + "/watch/";
+      const epNumber = episodeMatch[2].trim();
 
-        for (const [_, id, title] of seasonItems) {
-            const episodesBlock = getSeasonEpisodes(html, id);
-            const episodes = [...episodesBlock.matchAll(/<a[^>]+href="([^"]+)".*?>\s*الحلقة\s*<em>(\d+)<\/em>/g)]
-                .map(m => ({
-                    number: m[2],
-                    href: m[1] + '/watch/'
-                }));
-
-            if (episodes.length > 0 && episodes[0].number !== "1") {
-                episodes.reverse();
-            }
-
-            seasons.push({
-                title: title.trim(),
-                episodes: episodes
-            });
-        }
+      episodes.push({
+        number: epNumber,
+        href: epUrl
+      });
     }
 
-    details.seasons = seasons;
+    // ترتيب الحلقات حسب الرقم
+    episodes.sort((a, b) => parseInt(a.number) - parseInt(b.number));
 
-    console.log(details);
-    return details;
+    seasons.push({
+      title: seasonName,
+      episodes: episodes
+    });
+  }
+
+  return {
+    description,
+    poster,
+    year,
+    seasons
+  };
 }
 
-// مساعدة لفصل الحلقات حسب الموسم
-function getSeasonEpisodes(html, seasonId) {
-    const regex = new RegExp(`<div class="EpisodesList"[\\s\\S]*?data-season="${seasonId}"[\\s\\S]*?<\\/div>`);
-    const match = html.match(regex);
-    return match ? match[0] : '';
-}
-
-// فك ترميز HTML
+// فك ترميز الكيانات HTML مثل &amp;
 function decodeHTMLEntities(text) {
-    text = text.replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec));
-    const entities = {
-        '&quot;': '"',
-        '&amp;': '&',
-        '&apos;': "'",
-        '&lt;': '<',
-        '&gt;': '>'
-    };
-    for (const entity in entities) {
-        text = text.replace(new RegExp(entity, 'g'), entities[entity]);
-    }
-    return text;
-}
-        }
-
-        const eps = extractEpisodes(seasonHtml);
-        details.episodes.push({
-            seasonId: season.id,
-            seasonTitle: season.title,
-            episodes: eps
-        });
-    }
-
-    return details;
+  const entities = {
+    '&quot;': '"',
+    '&amp;': '&',
+    '&apos;': "'",
+    '&lt;': '<',
+    '&gt;': '>'
+  };
+  return text.replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
+             .replace(/&(quot|amp|apos|lt|gt);/g, (match) => entities[match]);
 }
 
 async function extractStreamUrl(html) {
