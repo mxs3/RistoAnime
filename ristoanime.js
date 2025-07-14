@@ -23,7 +23,7 @@ function searchResults(html) {
     return results;
 }
 
-function extractDetails(html) {
+async function extractDetails(html) {
     const storyMatch = html.match(/<div class="StoryArea">\s*<span>[^<]*<\/span>\s*<p>(.*?)<\/p>/);
     const description = storyMatch ? decodeHTMLEntities(storyMatch[1].trim()) : "";
 
@@ -40,7 +40,6 @@ function extractDetails(html) {
     const yearMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>(\d{4})<\/a>/);
     const releaseYear = yearMatch ? yearMatch[1].trim() : "";
 
-    // استخراج المواسم
     const seasons = [];
     const seasonRegex = /<li[^>]*>\s*<a[^>]+data-season="(\d+)"[^>]*>\s*([^<]+)<\/a>/g;
     let seasonMatch;
@@ -51,13 +50,16 @@ function extractDetails(html) {
         });
     }
 
-    // استخراج الحلقات لكل موسم
     const episodes = [];
     for (const season of seasons) {
+        let seasonHtml = html;
+        if (season.id !== "1") {
+            seasonHtml = await fetchSeasonEpisodes(season.id);
+        }
         episodes.push({
             seasonId: season.id,
             seasonTitle: season.title,
-            episodes: extractEpisodes(html, season.id)
+            episodes: extractEpisodes(seasonHtml, null)
         });
     }
 
@@ -71,34 +73,58 @@ function extractDetails(html) {
     };
 }
 
-function extractEpisodes(html, seasonId) {
-  let block = html;
-  if (seasonId) {
-    const regex = new RegExp(`<div[^>]*class="SeasonEpisodes"[^>]*data-season="${seasonId}"[\\s\\S]*?<\\/ul>`, 'i');
-    const match = html.match(regex);
-    if (match) block = match[0];
-    else return [];
-  }
+function extractEpisodes(html, seasonId = null) {
+    let block = html;
+    if (seasonId) {
+        const regex = new RegExp(`<div[^>]*class="SeasonEpisodes"[^>]*data-season="${seasonId}"[\\s\\S]*?<\\/ul>`, 'i');
+        const match = html.match(regex);
+        if (match) block = match[0];
+        else return [];
+    }
 
-  const episodes = [];
-  const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
-  let match;
+    const episodes = [];
+    const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
+    let match;
 
-  while ((match = episodeRegex.exec(block)) !== null) {
-    const href = match[1].trim() + "/watch/";
-    const number = match[2].trim();
+    while ((match = episodeRegex.exec(block)) !== null) {
+        const href = match[1].trim() + "/watch/";
+        const number = match[2].trim();
 
-    episodes.push({
-      href: href,
-      number: number
-    });
-  }
+        episodes.push({
+            href: href,
+            number: number
+        });
+    }
 
-  if (episodes.length > 0 && episodes[0].number !== "1") {
-    episodes.reverse();
-  }
+    if (episodes.length > 0 && episodes[0].number !== "1") {
+        episodes.reverse();
+    }
 
-  return episodes;
+    return episodes;
+}
+
+async function fetchSeasonEpisodes(seasonId) {
+    const ajaxUrl = 'https://ristoanime.net/wp-admin/admin-ajax.php';
+    const formData = new URLSearchParams();
+    formData.append('action', 'load_episodes');
+    formData.append('season', seasonId);
+
+    try {
+        const response = await soraFetch(ajaxUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Referer': ajaxUrl
+            },
+            body: formData.toString()
+        });
+
+        const seasonHtml = await response.text();
+        return seasonHtml;
+    } catch (e) {
+        console.error('Failed to fetch season episodes:', e);
+        return '';
+    }
 }
 
 async function extractStreamUrl(html) {
@@ -106,13 +132,11 @@ async function extractStreamUrl(html) {
 
     const multiStreams = { streams: [], subtitles: null };
 
-    // 1. استخراج رابط السيرفر embedUrl
     const serverMatch = html.match(/<li[^>]+data-watch="([^"]+)"/);
     let embedUrl = serverMatch ? serverMatch[1].trim() : '';
 
     if (!embedUrl) return JSON.stringify(multiStreams);
 
-    // 2. لو رابط Sibnet مباشر
     if (embedUrl.includes('video.sibnet.ru')) {
         try {
             const response = await soraFetch(embedUrl, {
@@ -123,13 +147,9 @@ async function extractStreamUrl(html) {
             });
             const sibnetHtml = await response.text();
 
-            // بحث عن رابط m3u8 في sibnetHtml
-            // غالبًا الرابط يكون داخل JSON أو متغيرات جافا سكريبت
             const m3u8Match = sibnetHtml.match(/"url"\s*:\s*"([^"]+\.m3u8)"/i);
-
             if (m3u8Match) {
-                const m3u8Url = m3u8Match[1].replace(/\\\//g, '/'); // إزالة الـ escape إذا وجد
-
+                const m3u8Url = m3u8Match[1].replace(/\\\//g, '/');
                 multiStreams.streams.push({
                     title: "Sibnet - Auto Quality",
                     streamUrl: m3u8Url,
@@ -143,7 +163,6 @@ async function extractStreamUrl(html) {
                 return JSON.stringify(multiStreams);
             }
 
-            // إذا لم نجد m3u8، حاول إيجاد mp4
             const mp4Match = sibnetHtml.match(/"url"\s*:\s*"([^"]+\.mp4)"/i);
             if (mp4Match) {
                 const mp4Url = mp4Match[1].replace(/\\\//g, '/');
@@ -161,11 +180,10 @@ async function extractStreamUrl(html) {
         } catch (e) {
             console.error('Error fetching Sibnet video:', e);
         }
-        // لو فشل أو لم نجد روابط، رجع فارغ
+
         return JSON.stringify(multiStreams);
     }
 
-    // 3. كود دعم الجودات القديمة + سيرفرات أخرى (mp4upload, vidmoly...)
     try {
         const response = await soraFetch(embedUrl, {
             headers: {
@@ -175,7 +193,6 @@ async function extractStreamUrl(html) {
         });
         const embedHtml = await response.text();
 
-        // دعم الجودات
         const sourcesMatch = embedHtml.match(/sources:\s*(\[[^\]]+\])/i);
         if (sourcesMatch) {
             let sources = [];
@@ -209,7 +226,6 @@ async function extractStreamUrl(html) {
             }
         }
 
-        // إذا ما فيش جودات، استخدام الرابط الوحيد القديم
         let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
             || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i)
             || embedHtml.match(/source\s*src=['"]([^'"]+)['"]/i);
