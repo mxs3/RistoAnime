@@ -123,21 +123,55 @@ async function extractStreamUrl(html) {
         });
         const embedHtml = await response.text();
 
-        // محاولة استخراج HLS أولاً (.m3u8)
+        // استخراج رابط HLS
         let hlsMatch = embedHtml.match(/['"](https?:\/\/[^'"]+\.m3u8[^'"]*)['"]/i);
         if (hlsMatch) {
             const hlsUrl = hlsMatch[1].trim();
-            multiStreams.streams.push({
-                title: "HLS Stream",
-                streamUrl: hlsUrl,
+
+            // محاولة جلب محتوى m3u8 وتحليل الجودات
+            const m3u8Res = await soraFetch(hlsUrl, {
                 headers: {
-                    "Referer": embedUrl,
-                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-                },
-                subtitles: null
+                    'Referer': embedUrl,
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
+                }
             });
+            const m3u8Text = await m3u8Res.text();
+
+            const variantRegex = /#EXT-X-STREAM-INF:[^\n]*RESOLUTION=\d+x(\d+)[^\n]*\n([^\n]+)/g;
+            let match;
+            const foundQualities = [];
+
+            while ((match = variantRegex.exec(m3u8Text)) !== null) {
+                const quality = match[1] + "p";
+                const streamUrl = new URL(match[2].trim(), hlsUrl).href;
+
+                foundQualities.push({
+                    title: quality,
+                    streamUrl: streamUrl,
+                    headers: {
+                        "Referer": embedUrl,
+                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+                    },
+                    subtitles: null
+                });
+            }
+
+            // لو فيه جودات متعددة أضفها، وإلا أضف الملف الأصلي فقط
+            if (foundQualities.length > 0) {
+                multiStreams.streams = foundQualities;
+            } else {
+                multiStreams.streams.push({
+                    title: "Auto",
+                    streamUrl: hlsUrl,
+                    headers: {
+                        "Referer": embedUrl,
+                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+                    },
+                    subtitles: null
+                });
+            }
         } else {
-            // fallback إلى MP4 إن لم يتوفر HLS
+            // fallback إلى MP4 إن لم يوجد HLS
             let mp4Match = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
                         || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
 
