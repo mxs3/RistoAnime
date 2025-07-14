@@ -12,10 +12,13 @@ function searchResults(html) {
 
         if (hrefMatch && titleMatch && imgMatch) {
             const href = hrefMatch[1].trim();
-            const title = titleMatch[1].trim();
+            const rawTitle = decodeHTMLEntities(titleMatch[1].trim());
             const image = imgMatch[1].trim();
 
-            results.push({ title, image, href });
+            // استخراج الكلمات الإنجليزية والأرقام المهمة فقط
+            const englishTitle = rawTitle.match(/[a-zA-Z0-9:.\-()]+/g)?.join(' ') || rawTitle;
+
+            results.push({ title: englishTitle.trim(), image, href });
         }
     });
 
