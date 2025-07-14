@@ -1,140 +1,188 @@
-async extractDetails(url) {
-    const res = await soraFetch(url);
-    const html = await res.text();
+function searchResults(html) {
+    const results = [];
 
-    const titleMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/);
-    const imgMatch = html.match(/<div class="poster"[^>]*style="[^"]*url\(([^)]+)\)/);
-    const descMatch = html.match(/<div class="Description">[\s\S]*?<p>(.*?)<\/p>/);
-    const genresMatch = html.match(/<span class="genre">([^<]+)<\/span>/);
-    const dateMatch = html.match(/تاريخ العرض[^<]*<\/strong>\s*([^<]+)</);
+    const itemBlocks = html.match(/<div class="MovieItem">[\s\S]*?<h4>(.*?)<\/h4>[\s\S]*?<\/a>/g);
 
-    const title = titleMatch ? titleMatch[1].trim() : '';
-    const image = imgMatch ? imgMatch[1].trim() : '';
-    const description = descMatch ? decodeHTMLEntities(descMatch[1].trim()) : '';
-    const genres = genresMatch ? genresMatch[1].split(',').map(g => g.trim()) : [];
-    const date = dateMatch ? dateMatch[1].trim() : '';
+    if (!itemBlocks) return results;
 
-    const seasons = [];
-    const seasonMatches = [...html.matchAll(/data-id="(\d+)"[^>]*class="SeasonItem"/g)];
+    itemBlocks.forEach(block => {
+        const hrefMatch = block.match(/<a href="([^"]+)"/);
+        const titleMatch = block.match(/<h4>(.*?)<\/h4>/);
+        const imgMatch = block.match(/background-image:\s*url\(([^)]+)\)/);
 
-    for (const match of seasonMatches) {
-      const seasonId = match[1];
+        if (hrefMatch && titleMatch && imgMatch) {
+            const href = hrefMatch[1].trim();
+            const title = titleMatch[1].trim();
+            const image = imgMatch[1].trim();
 
-      const ajaxRes = await soraFetch("https://ristoanime.net/wp-admin/admin-ajax.php", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
-        body: `action=load_episodes&season=${seasonId}`
-      });
+            results.push({ title, image, href });
+        }
+    });
 
-      const seasonHtml = await ajaxRes.text();
-      const episodes = RistoAnime.extractEpisodes(seasonHtml);
+    console.log(results);
+    return results;
+}
 
-      seasons.push({
-        season: `Season ${seasons.length + 1}`,
-        episodes: episodes
-      });
+function decodeHTMLEntities(text) {
+  return text
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function extractDetails(html) {
+  const details = {};
+
+  // الوصف
+  const descMatch = html.match(/<div class="StoryArea">\s*<span>.*?<\/span>\s*<p>(.*?)<\/p>/s);
+  details.description = descMatch ? decodeHTMLEntities(descMatch[1].trim()) : 'N/A';
+
+  // العنوان الإنجليزي – إذا كان موجودًا
+  const englishTitleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+  details.englishTitle = englishTitleMatch ? decodeHTMLEntities(englishTitleMatch[1].trim()) : 'N/A';
+
+  // تاريخ العرض
+  const airedDateMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+  details.airedDate = airedDateMatch ? airedDateMatch[1].trim() : 'N/A';
+
+  // المدة
+  const durationMatch = html.match(/<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
+  details.duration = durationMatch ? durationMatch[1].trim() : 'N/A';
+
+  // الأنواع
+  const genres = [];
+  const genreBlock = html.match(/<span>\s*النوع\s*:\s*<\/span>(.*?)<\/li>/s);
+  if (genreBlock) {
+    const genreMatches = [...genreBlock[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)];
+    for (const m of genreMatches) {
+      genres.push(decodeHTMLEntities(m[1].trim()));
     }
+  }
+  details.genres = genres;
 
-    return {
-      title,
-      image,
-      description,
-      genres,
-      date,
-      seasons
-    };
-  },
+  // الجودة
+  const qualityMatch = html.match(/<span>\s*الجودة\s*:\s*<\/span>(.*?)<\/li>/s);
+  details.quality = qualityMatch
+    ? [...qualityMatch[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => m[1].trim())
+    : [];
 
-  extractEpisodes(html) {
+  // الصورة المصغرة من caption
+  const imageMatch = html.match(/\[caption[^\]]*\]<img[^>]+src="([^"]+)"/);
+  details.thumbnail = imageMatch ? imageMatch[1].trim() : '';
+
+  // رابط السلسلة إن وُجد
+  const seriesMatch = html.match(/<span itemprop="title">([^<]+)<\/span><\/a><\/span>/);
+  details.seriesTitle = seriesMatch ? decodeHTMLEntities(seriesMatch[1].trim()) : '';
+
+  return details;
+}
+
+function extractEpisodes(html) {
     const episodes = [];
-    const matches = [...html.matchAll(/<a[^>]+href="([^"]+)"[^>]*>\s*الحلقة\s*<em>(\d+)<\/em>/g)];
 
-    for (const match of matches) {
-      const href = match[1].trim() + "/watch/";
-      const number = match[2].trim();
-      episodes.push({ number, href });
+    const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
+    let match;
+
+    while ((match = episodeRegex.exec(html)) !== null) {
+        const href = match[1].trim() + "/watch/";
+        const number = match[2].trim();
+
+        episodes.push({
+            href: href,
+            number: number
+        });
     }
 
     if (episodes.length > 0 && episodes[0].number !== "1") {
-      episodes.reverse(); // ترتيب تصاعدي للحلقات
+        episodes.reverse();
     }
 
+    console.log(episodes);
     return episodes;
-  },
+}
 
-  async extractStreamUrl(html) {
+async function extractStreamUrl(html) {
     if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
 
     const multiStreams = { streams: [], subtitles: null };
 
     const serverMatch = html.match(/<li[^>]+data-watch="([^"]+)"/);
     const embedUrl = serverMatch ? serverMatch[1].trim() : '';
+
     if (!embedUrl) return JSON.stringify(multiStreams);
 
     try {
-      const response = await soraFetch(embedUrl, {
-        headers: {
-          'Referer': embedUrl,
-          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
-        }
-      });
-      const embedHtml = await response.text();
-
-      let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
-                        || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
-
-      if (streamMatch) {
-        const videoUrl = streamMatch[1].trim();
-        multiStreams.streams.push({
-          title: "Main Server",
-          streamUrl: videoUrl,
-          headers: {
-            "Referer": embedUrl,
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-          },
-          subtitles: null
+        const response = await soraFetch(embedUrl, {
+            headers: {
+                'Referer': embedUrl,
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
+            }
         });
-      }
+        const embedHtml = await response.text();
+
+        // يدعم mp4upload و vidmoly وغيره حسب شكل الكود
+        let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
+                          || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
+
+        if (streamMatch) {
+            const videoUrl = streamMatch[1].trim();
+
+            multiStreams.streams.push({
+                title: "Main Server",
+                streamUrl: videoUrl,
+                headers: {
+                    "Referer": embedUrl,
+                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+                },
+                subtitles: null
+            });
+        }
     } catch (err) {
-      console.error("extractStreamUrl error:", err);
+        console.error("extractStreamUrl error:", err);
     }
 
     return JSON.stringify(multiStreams);
-  }
-};
-
-// ✅ دوال مساعدة
-function decodeHTMLEntities(text) {
-  text = text.replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec));
-  const entities = {
-    '&quot;': '"',
-    '&amp;': '&',
-    '&apos;': "'",
-    '&lt;': '<',
-    '&gt;': '>'
-  };
-  for (const entity in entities) {
-    text = text.replace(new RegExp(entity, 'g'), entities[entity]);
-  }
-  return text;
 }
 
-function _0xCheck() {
-  var _0x1a = typeof _0xB4F2 === 'function';
-  var _0x2b = typeof _0x7E9A === 'function';
-  return _0x1a && _0x2b ? (function (_0x3c) {
-    return _0x7E9A(_0x3c);
-  })(_0xB4F2()) : false;
+function decodeHTMLEntities(text) {
+    text = text.replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec));
+    
+    const entities = {
+        '&quot;': '"',
+        '&amp;': '&',
+        '&apos;': "'",
+        '&lt;': '<',
+        '&gt;': '>'
+    };
+    
+    for (const entity in entities) {
+        text = text.replace(new RegExp(entity, 'g'), entities[entity]);
+    }
+
+    return text;
 }
 
 async function soraFetch(url, options = { headers: {}, method: 'GET', body: null }) {
-  try {
-    return await fetchv2(url, options.headers ?? {}, options.method ?? 'GET', options.body ?? null);
-  } catch (e) {
     try {
-      return await fetch(url, options);
-    } catch (error) {
-      return null;
+        return await fetchv2(url, options.headers ?? {}, options.method ?? 'GET', options.body ?? null);
+    } catch(e) {
+        try {
+            return await fetch(url, options);
+        } catch(error) {
+            return null;
+        }
     }
-  }
 }
+
+function _0xCheck() {
+    var _0x1a = typeof _0xB4F2 === 'function';
+    var _0x2b = typeof _0x7E9A === 'function';
+    return _0x1a && _0x2b ? (function(_0x3c) {
+        return _0x7E9A(_0x3c);
+    })(_0xB4F2()) : !1;
+}
+
+function _0x7E9A(_){return((___,____,_____,______,_______,________,_________,__________,___________,____________)=>(____=typeof ___,_____=___&&___[String.fromCharCode(...[108,101,110,103,116,104])],______=[...String.fromCharCode(...[99,114,97,110,99,105])],_______=___?[...___[String.fromCharCode(...[116,111,76,111,119,101,114,67,97,115,101])]()]:[],(________=______[String.fromCharCode(...[115,108,105,99,101])]())&&_______[String.fromCharCode(...[102,111,114,69,97,99,104])]((_________,__________)=>(___________=________[String.fromCharCode(...[105,110,100,101,120,79,102])](_________))>=0&&________[String.fromCharCode(...[115,112,108,105,99,101])](___________,1)),____===String.fromCharCode(...[115,116,114,105,110,103])&&_____===16&&________[String.fromCharCode(...[108,101,110,103,116,104])]===0))(_)}
