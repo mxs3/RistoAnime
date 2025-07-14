@@ -104,6 +104,7 @@ function extractEpisodes(html) {
     return episodes;
 }
 
+// ✅ دالة استخراج رابط المشاهدة (stream)
 async function extractStreamUrl(html) {
     if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
 
@@ -111,7 +112,6 @@ async function extractStreamUrl(html) {
 
     const serverMatch = html.match(/<li[^>]+data-watch="([^"]+)"/);
     const embedUrl = serverMatch ? serverMatch[1].trim() : '';
-
     if (!embedUrl) return JSON.stringify(multiStreams);
 
     try {
@@ -123,13 +123,11 @@ async function extractStreamUrl(html) {
         });
         const embedHtml = await response.text();
 
-        // يدعم mp4upload و vidmoly وغيره حسب شكل الكود
         let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
                           || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
 
         if (streamMatch) {
             const videoUrl = streamMatch[1].trim();
-
             multiStreams.streams.push({
                 title: "Main Server",
                 streamUrl: videoUrl,
