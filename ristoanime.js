@@ -141,23 +141,23 @@ async function extractStreamUrl(html) {
                               || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
 
             if (streamMatch) videoUrl = streamMatch[1].trim();
-        } catch (err) {
-            console.error("Error fetching stream from:", embedUrl, err);
-        }
+        } catch (err) {}
 
-        let serverName = '';
-        if (embedUrl.includes('vidmoly')) serverName = 'Vidmoly';
-        else if (embedUrl.includes('uqload')) serverName = 'Uqload';
-        else if (embedUrl.includes('mp4upload')) serverName = 'Mp4Upload';
-        else if (embedUrl.includes('sibnet')) serverName = 'Sibnet';
-        else if (embedUrl.includes('sendvid')) serverName = 'Sendvid';
-        else if (embedUrl.includes('listeamed')) serverName = 'Listeamed';
-        else if (embedUrl.includes('playerwish')) serverName = 'Playerwish';
-        else serverName = 'Server';
+        let baseName = '';
+        if (embedUrl.includes('vidmoly')) baseName = 'Vidmoly';
+        else if (embedUrl.includes('uqload')) baseName = 'Uqload';
+        else if (embedUrl.includes('mp4upload')) baseName = 'Mp4Upload';
+        else if (embedUrl.includes('sibnet')) baseName = 'Sibnet';
+        else if (embedUrl.includes('sendvid')) baseName = 'Sendvid';
+        else if (embedUrl.includes('listeamed')) baseName = 'Listeamed';
+        else if (embedUrl.includes('playerwish')) baseName = 'Playerwish';
+        else baseName = 'Server';
+
+        const finalName = videoUrl ? `✅ ${baseName}` : `❌ ${baseName} (No Stream)`;
 
         multiStreams.streams.push({
-            title: serverName,
-            streamUrl: videoUrl || '', // حتى لو فاضي هيرجع في القائمة
+            title: finalName,
+            streamUrl: videoUrl ?? null,
             headers: {
                 "Referer": embedUrl,
                 "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
