@@ -127,6 +127,7 @@ async function extractStreamUrl(html) {
     for (const match of sortedMatches) {
         const embedUrl = match[1].trim();
         let videoUrl = null;
+        let videoType = null;
 
         try {
             const response = await soraFetch(embedUrl, {
@@ -137,10 +138,22 @@ async function extractStreamUrl(html) {
             });
             const embedHtml = await response.text();
 
-            let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
-                              || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
+            const mp4Match = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
+                           || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]\s*,\s*type:\s*['"]video\/mp4['"]/i)
+                           || embedHtml.match(/file:\s*['"]([^'"]+\.mp4)['"]/i);
 
-            if (streamMatch) videoUrl = streamMatch[1].trim();
+            const hlsMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]application\/x-mpegURL['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
+                           || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+\.m3u8)['"]\s*,\s*type:\s*['"]hls['"]/i)
+                           || embedHtml.match(/file:\s*['"]([^'"]+\.m3u8)['"]/i);
+
+            if (hlsMatch) {
+                videoUrl = hlsMatch[1].trim();
+                videoType = 'HLS';
+            } else if (mp4Match) {
+                videoUrl = mp4Match[1].trim();
+                videoType = 'MP4';
+            }
+
         } catch (err) {}
 
         let baseName = '';
@@ -153,7 +166,7 @@ async function extractStreamUrl(html) {
         else if (embedUrl.includes('playerwish')) baseName = 'Playerwish';
         else baseName = 'Server';
 
-        const finalName = videoUrl ? `✅ ${baseName}` : `❌ ${baseName} (No Stream)`;
+        const finalName = videoUrl ? `✅ ${baseName} (${videoType})` : `❌ ${baseName} (No Stream)`;
 
         multiStreams.streams.push({
             title: finalName,
