@@ -109,77 +109,153 @@ function extractEpisodes(html) {
 
 // ✅ دالة استخراج رابط المشاهدة (stream)
 async function extractStreamUrl(html) {
-    if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
+  if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
 
-    const multiStreams = { streams: [], subtitles: null };
+  const multiStreams = { streams: [], subtitles: null };
 
-    const serverMatches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
-    if (!serverMatches || serverMatches.length === 0) return JSON.stringify(multiStreams);
+  const serverMatches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
+  if (!serverMatches || serverMatches.length === 0) return JSON.stringify(multiStreams);
 
-    const priority = ['vidmoly', 'uqload', 'mp4upload', 'sibnet', 'sendvid', 'listeamed', 'playerwish'];
+  const priority = ['vidmoly', 'uqload', 'mp4upload', 'sibnet', 'sendvid', 'listeamed', 'playerwish'];
 
-    const sortedMatches = serverMatches.sort((a, b) => {
-        const aIndex = priority.findIndex(s => a[1].includes(s));
-        const bIndex = priority.findIndex(s => b[1].includes(s));
-        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-    });
+  const sortedMatches = serverMatches.sort((a, b) => {
+    const aIndex = priority.findIndex(s => a[1].includes(s));
+    const bIndex = priority.findIndex(s => b[1].includes(s));
+    return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+  });
 
-    for (const match of sortedMatches) {
-        const embedUrl = match[1].trim();
-        let videoUrl = null;
-        let videoType = null;
+  for (const match of sortedMatches) {
+    const embedUrl = match[1].trim();
+    let sources = [];
 
-        try {
-            const response = await soraFetch(embedUrl, {
-                headers: {
-                    'Referer': embedUrl,
-                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
-                }
-            });
-            const embedHtml = await response.text();
-
-            const mp4Match = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
-                           || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]\s*,\s*type:\s*['"]video\/mp4['"]/i)
-                           || embedHtml.match(/file:\s*['"]([^'"]+\.mp4)['"]/i);
-
-            const hlsMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]application\/x-mpegURL['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
-                           || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+\.m3u8)['"]\s*,\s*type:\s*['"]hls['"]/i)
-                           || embedHtml.match(/file:\s*['"]([^'"]+\.m3u8)['"]/i);
-
-            if (hlsMatch) {
-                videoUrl = hlsMatch[1].trim();
-                videoType = 'HLS';
-            } else if (mp4Match) {
-                videoUrl = mp4Match[1].trim();
-                videoType = 'MP4';
-            }
-
-        } catch (err) {}
-
-        let baseName = '';
-        if (embedUrl.includes('vidmoly')) baseName = 'Vidmoly';
-        else if (embedUrl.includes('uqload')) baseName = 'Uqload';
-        else if (embedUrl.includes('mp4upload')) baseName = 'Mp4Upload';
-        else if (embedUrl.includes('sibnet')) baseName = 'Sibnet';
-        else if (embedUrl.includes('sendvid')) baseName = 'Sendvid';
-        else if (embedUrl.includes('listeamed')) baseName = 'Listeamed';
-        else if (embedUrl.includes('playerwish')) baseName = 'Playerwish';
-        else baseName = 'Server';
-
-        const finalName = videoUrl ? `✅ ${baseName} (${videoType})` : `❌ ${baseName} (No Stream)`;
-
-        multiStreams.streams.push({
-            title: finalName,
-            streamUrl: videoUrl ?? null,
-            headers: {
-                "Referer": embedUrl,
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-            },
-            subtitles: null
+    if (embedUrl.includes('vidmoly')) {
+      sources = await extractVidmoly(embedUrl);
+    } else if (embedUrl.includes('uqload')) {
+      sources = await extractUqload(embedUrl);
+    } else if (embedUrl.includes('mp4upload')) {
+      sources = await extractMp4upload(embedUrl);
+    } else {
+      try {
+        const response = await soraFetch(embedUrl, {
+          headers: {
+            'Referer': embedUrl,
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
+          }
         });
+        const embedHtml = await response.text();
+
+        const mp4Match = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
+          || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]\s*,\s*type:\s*['"]video\/mp4['"]/i)
+          || embedHtml.match(/file:\s*['"]([^'"]+\.mp4)['"]/i);
+
+        if (mp4Match) {
+          sources = [{
+            url: mp4Match[1].trim(),
+            quality: 'Unknown',
+            headers: {
+              "Referer": embedUrl,
+              "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+            }
+          }];
+        }
+      } catch (e) {}
     }
 
-    return JSON.stringify(multiStreams);
+    let baseName = '';
+    if (embedUrl.includes('vidmoly')) baseName = 'Vidmoly';
+    else if (embedUrl.includes('uqload')) baseName = 'Uqload';
+    else if (embedUrl.includes('mp4upload')) baseName = 'Mp4Upload';
+    else if (embedUrl.includes('sibnet')) baseName = 'Sibnet';
+    else if (embedUrl.includes('sendvid')) baseName = 'Sendvid';
+    else if (embedUrl.includes('listeamed')) baseName = 'Listeamed';
+    else if (embedUrl.includes('playerwish')) baseName = 'Playerwish';
+    else baseName = 'Server';
+
+    if (sources.length === 0) {
+      multiStreams.streams.push({
+        title: `❌ ${baseName} (No Stream)`,
+        streamUrl: null,
+        headers: {
+          "Referer": embedUrl,
+          "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+        },
+        subtitles: null
+      });
+      continue;
+    }
+
+    for (const stream of sources) {
+      multiStreams.streams.push({
+        title: `✅ ${baseName} (${stream.quality})`,
+        streamUrl: stream.url,
+        headers: stream.headers,
+        subtitles: null
+      });
+    }
+  }
+
+  return JSON.stringify(multiStreams);
+}
+
+async function extractVidmoly(url) {
+  const res = await soraFetch(url, {
+    headers: {
+      'Referer': url,
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
+    }
+  });
+  const html = await res.text();
+  const match = html.match(/sources:\s*\[\s*\{\s*file:\s*["']([^"']+)["'].*?label:\s*["']([^"']+)["']/);
+  if (!match) return [];
+  return [{
+    url: match[1],
+    quality: match[2],
+    headers: {
+      Referer: url,
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+    }
+  }];
+}
+
+async function extractUqload(url) {
+  const res = await soraFetch(url, {
+    headers: {
+      'Referer': url,
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
+    }
+  });
+  const html = await res.text();
+  const match = html.match(/sources:\s*\[\s*\{\s*file:\s*["']([^"']+\.mp4)["']/);
+  if (!match) return [];
+  return [{
+    url: match[1],
+    quality: 'SD',
+    headers: {
+      Referer: url,
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+    }
+  }];
+}
+
+async function extractMp4upload(url) {
+  const res = await soraFetch(url, {
+    headers: {
+      'Referer': url,
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
+    }
+  });
+  const html = await res.text();
+  const match = html.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
+    || html.match(/file:\s*['"]([^'"]+\.mp4)['"]/i);
+  if (!match) return [];
+  return [{
+    url: match[1],
+    quality: 'SD',
+    headers: {
+      Referer: url,
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+    }
+  }];
 }
 
 function decodeHTMLEntities(text) {
