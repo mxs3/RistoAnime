@@ -126,6 +126,8 @@ async function extractStreamUrl(html) {
 
     for (const match of sortedMatches) {
         const embedUrl = match[1].trim();
+        let videoUrl = null;
+
         try {
             const response = await soraFetch(embedUrl, {
                 headers: {
@@ -138,33 +140,30 @@ async function extractStreamUrl(html) {
             let streamMatch = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
                               || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]/i);
 
-            if (streamMatch) {
-                const videoUrl = streamMatch[1].trim();
-
-                let serverName = '';
-                if (embedUrl.includes('vidmoly')) serverName = 'Vidmoly';
-                else if (embedUrl.includes('uqload')) serverName = 'Uqload';
-                else if (embedUrl.includes('mp4upload')) serverName = 'Mp4Upload';
-                else if (embedUrl.includes('sibnet')) serverName = 'Sibnet';
-                else if (embedUrl.includes('sendvid')) serverName = 'Sendvid';
-                else if (embedUrl.includes('listeamed')) serverName = 'Listeamed';
-                else if (embedUrl.includes('playerwish')) serverName = 'Playerwish';
-                else serverName = 'Server';
-
-                multiStreams.streams.push({
-                    title: serverName,
-                    streamUrl: videoUrl,
-                    headers: {
-                        "Referer": embedUrl,
-                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-                    },
-                    subtitles: null
-                });
-            }
+            if (streamMatch) videoUrl = streamMatch[1].trim();
         } catch (err) {
             console.error("Error fetching stream from:", embedUrl, err);
-            continue;
         }
+
+        let serverName = '';
+        if (embedUrl.includes('vidmoly')) serverName = 'Vidmoly';
+        else if (embedUrl.includes('uqload')) serverName = 'Uqload';
+        else if (embedUrl.includes('mp4upload')) serverName = 'Mp4Upload';
+        else if (embedUrl.includes('sibnet')) serverName = 'Sibnet';
+        else if (embedUrl.includes('sendvid')) serverName = 'Sendvid';
+        else if (embedUrl.includes('listeamed')) serverName = 'Listeamed';
+        else if (embedUrl.includes('playerwish')) serverName = 'Playerwish';
+        else serverName = 'Server';
+
+        multiStreams.streams.push({
+            title: serverName,
+            streamUrl: videoUrl || '', // حتى لو فاضي هيرجع في القائمة
+            headers: {
+                "Referer": embedUrl,
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+            },
+            subtitles: null
+        });
     }
 
     return JSON.stringify(multiStreams);
