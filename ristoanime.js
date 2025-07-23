@@ -113,12 +113,18 @@ async function extractStreamUrl(html) {
 
     const multiStreams = { streams: [], subtitles: null };
 
-    // اجلب كل روابط السيرفرات
     const serverMatches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
-
     if (!serverMatches || serverMatches.length === 0) return JSON.stringify(multiStreams);
 
-    for (const match of serverMatches) {
+    const priority = ['vidmoly', 'uqload', 'mp4upload', 'sibnet', 'sendvid', 'listeamed', 'playerwish'];
+
+    const sortedMatches = serverMatches.sort((a, b) => {
+        const aIndex = priority.findIndex(s => a[1].includes(s));
+        const bIndex = priority.findIndex(s => b[1].includes(s));
+        return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+    });
+
+    for (const match of sortedMatches) {
         const embedUrl = match[1].trim();
         try {
             const response = await soraFetch(embedUrl, {
@@ -135,11 +141,14 @@ async function extractStreamUrl(html) {
             if (streamMatch) {
                 const videoUrl = streamMatch[1].trim();
 
-                // اسم السيرفر بناءً على الرابط
                 let serverName = '';
                 if (embedUrl.includes('vidmoly')) serverName = 'Vidmoly';
+                else if (embedUrl.includes('uqload')) serverName = 'Uqload';
                 else if (embedUrl.includes('mp4upload')) serverName = 'Mp4Upload';
-                else if (embedUrl.includes('streamtape')) serverName = 'Streamtape';
+                else if (embedUrl.includes('sibnet')) serverName = 'Sibnet';
+                else if (embedUrl.includes('sendvid')) serverName = 'Sendvid';
+                else if (embedUrl.includes('listeamed')) serverName = 'Listeamed';
+                else if (embedUrl.includes('playerwish')) serverName = 'Playerwish';
                 else serverName = 'Server';
 
                 multiStreams.streams.push({
