@@ -127,27 +127,27 @@ async function extractStreamUrl(html) {
     for (const match of sortedMatches) {
         const embedUrl = match[1].trim();
         let streams = [];
-        let serverName = '';
 
-        if (embedUrl.includes('vidmoly')) {
-            streams = await extractVidmoly(embedUrl);
-            serverName = 'Vidmoly';
-        } else if (embedUrl.includes('uqload')) {
-            streams = await extractUqload(embedUrl);
-            serverName = 'Uqload';
-        } else if (embedUrl.includes('mp4upload')) {
-            streams = await extractMp4upload(embedUrl);
-            serverName = 'Mp4upload';
-        } else if (embedUrl.includes('sendvid')) {
-            streams = await extractSendvid(embedUrl);
-            serverName = 'Sendvid';
-        }
+        if (embedUrl.includes('vidmoly')) streams = await extractVidmoly(embedUrl);
+        else if (embedUrl.includes('mp4upload')) streams = await extractMp4upload(embedUrl);
+        else if (embedUrl.includes('uqload')) streams = await extractUqload(embedUrl);
+        else if (embedUrl.includes('sendvid')) streams = await extractSendvid(embedUrl);
 
-        for (const stream of streams) {
+        const baseName = embedUrl.includes('vidmoly') ? 'Vidmoly (Auto)'
+                         : embedUrl.includes('mp4upload') ? 'Mp4upload (1080)'
+                         : embedUrl.includes('uqload') ? 'Uqload (480)'
+                         : embedUrl.includes('sendvid') ? 'Sendvid (720)'
+                         : 'Server';
+
+        for (const s of streams) {
             multiStreams.streams.push({
-                title: `${serverName} (${stream.quality})`,
-                streamUrl: stream.url,
-                headers: stream.headers || {}
+                title: baseName,
+                streamUrl: s.url,
+                headers: s.headers ?? {
+                    Referer: embedUrl,
+                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+                },
+                subtitles: null
             });
         }
     }
