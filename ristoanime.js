@@ -116,7 +116,7 @@ async function extractStreamUrl(html) {
     const serverMatches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
     if (!serverMatches || serverMatches.length === 0) return JSON.stringify(multiStreams);
 
-    const priority = ['vidmoly', 'uqload', 'mp4upload', 'sibnet', 'sendvid', 'listeamed', 'playerwish'];
+    const priority = ['vidmoly', 'uqload', 'mp4upload', 'sendvid'];
 
     const sortedMatches = serverMatches.sort((a, b) => {
         const aIndex = priority.findIndex(s => a[1].includes(s));
@@ -127,33 +127,27 @@ async function extractStreamUrl(html) {
     for (const match of sortedMatches) {
         const embedUrl = match[1].trim();
         let streams = [];
+        let serverName = '';
 
-        if (embedUrl.includes('vidmoly')) streams = await extractVidmoly(embedUrl);
-        else if (embedUrl.includes('mp4upload')) streams = await extractMp4upload(embedUrl);
-        else if (embedUrl.includes('uqload')) streams = await extractUqload(embedUrl);
-        else if (embedUrl.includes('sibnet')) streams = await extractSibnet(embedUrl);
-        else if (embedUrl.includes('sendvid')) streams = await extractSendvid(embedUrl);
-        else if (embedUrl.includes('listeamed')) streams = await extractListeamed(embedUrl);
-        else if (embedUrl.includes('playerwish')) streams = await extractPlayerwish(embedUrl);
+        if (embedUrl.includes('vidmoly')) {
+            streams = await extractVidmoly(embedUrl);
+            serverName = 'Vidmoly';
+        } else if (embedUrl.includes('uqload')) {
+            streams = await extractUqload(embedUrl);
+            serverName = 'Uqload';
+        } else if (embedUrl.includes('mp4upload')) {
+            streams = await extractMp4upload(embedUrl);
+            serverName = 'Mp4upload';
+        } else if (embedUrl.includes('sendvid')) {
+            streams = await extractSendvid(embedUrl);
+            serverName = 'Sendvid';
+        }
 
-        const baseName = embedUrl.includes('vidmoly') ? 'Vidmoly'
-                         : embedUrl.includes('mp4upload') ? 'Mp4Upload'
-                         : embedUrl.includes('uqload') ? 'Uqload'
-                         : embedUrl.includes('sibnet') ? 'Sibnet'
-                         : embedUrl.includes('sendvid') ? 'Sendvid'
-                         : embedUrl.includes('listeamed') ? 'Listeamed'
-                         : embedUrl.includes('playerwish') ? 'Playerwish'
-                         : 'Server';
-
-        for (const s of streams) {
+        for (const stream of streams) {
             multiStreams.streams.push({
-                title: `${baseName} (${s.quality ?? 'Auto'})`,
-                streamUrl: s.url,
-                headers: s.headers ?? {
-                    Referer: embedUrl,
-                    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-                },
-                subtitles: null
+                title: `${serverName} (${stream.quality})`,
+                streamUrl: stream.url,
+                headers: stream.headers || {}
             });
         }
     }
