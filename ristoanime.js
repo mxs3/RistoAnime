@@ -214,19 +214,19 @@ async function extractSibnet(embedUrl) {
     });
     const html = await res.text();
 
-    const match = html.match(/src:\s*["']([^"']+\.m3u8)["']/);
-    if (!match) return [];
+    const match = html.match(/player\.src\(\{\s*type:\s*["']video\/mp4["'],\s*src:\s*["']([^"']+)["']/i);
+    if (match) {
+        return [{
+            url: match[1],
+            quality: 'Auto',
+            headers: {
+                Referer: embedUrl,
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+            }
+        }];
+    }
 
-    return [{
-        title: "Auto",
-        streamUrl: match[1].startsWith("http") ? match[1] : `https://video.sibnet.ru${match[1]}`,
-        quality: "Auto",
-        type: "hls",
-        headers: {
-            Referer: embedUrl,
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-        }
-    }];
+    return [];
 }
 
 async function extractSendvid(embedUrl) {
