@@ -184,11 +184,25 @@ async function extractMp4upload(embedUrl) {
 }
 
 async function extractUqload(embedUrl) {
-    const res = await soraFetch(embedUrl, { headers: { Referer: embedUrl } });
+    const res = await soraFetch(embedUrl, {
+        headers: {
+            Referer: embedUrl,
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+        }
+    });
     const html = await res.text();
-    const m = html.match(/"file"\s*:\s*"([^"]+)"/);
-    if (!m) return [];
-    return [{ url: m[1], quality: 'Auto' }];
+
+    const match = html.match(/sources:\s*\[\s*"([^"]+\.mp4)"/i);
+    if (!match) return [];
+
+    return [{
+        url: match[1],
+        quality: 'Auto',
+        headers: {
+            Referer: embedUrl,
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+        }
+    }];
 }
 
 async function extractSibnet(embedUrl) {
