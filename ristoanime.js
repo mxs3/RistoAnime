@@ -12,13 +12,10 @@ function searchResults(html) {
 
         if (hrefMatch && titleMatch && imgMatch) {
             const href = hrefMatch[1].trim();
-            const rawTitle = decodeHTMLEntities(titleMatch[1].trim());
+            const title = titleMatch[1].trim();
             const image = imgMatch[1].trim();
 
-            // استخراج الكلمات الإنجليزية والأرقام المهمة فقط
-            const englishTitle = rawTitle.match(/[a-zA-Z0-9:.\-()]+/g)?.join(' ') || rawTitle;
-
-            results.push({ title: englishTitle.trim(), image, href });
+            results.push({ title, image, href });
         }
     });
 
@@ -26,61 +23,28 @@ function searchResults(html) {
     return results;
 }
 
-function decodeHTMLEntities(text) {
-  return text
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, '&')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>');
-}
-
 function extractDetails(html) {
-  const details = {};
+    const details = [];
 
-  // الوصف
-  const descMatch = html.match(/<div class="StoryArea">\s*<span>.*?<\/span>\s*<p>(.*?)<\/p>/s);
-  details.description = descMatch ? decodeHTMLEntities(descMatch[1].trim()) : 'N/A';
+    const descriptionMatch = html.match(/<p[^>]*>(.*?)<\/p>/s);
+    let description = descriptionMatch 
+        ? decodeHTMLEntities(descriptionMatch[1].trim()) 
+        : 'N/A';
 
-  // العنوان الإنجليزي – إذا كان موجودًا
-  const englishTitleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-  details.englishTitle = englishTitleMatch ? decodeHTMLEntities(englishTitleMatch[1].trim()) : 'N/A';
+    const aliasMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-clock"><\/i>\s*<\/div>\s*<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>\s*(\d+)\s*<\/a>/);
+    let alias = aliasMatch ? aliasMatch[1].trim() : 'N/A';
 
-  // تاريخ العرض
-  const airedDateMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-  details.airedDate = airedDateMatch ? airedDateMatch[1].trim() : 'N/A';
+    const airdateMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-calendar"><\/i>\s*<\/div>\s*<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*?>\s*(\d{4})\s*<\/a>/);
+    let airdate = airdateMatch ? airdateMatch[1].trim() : 'N/A';
 
-  // المدة
-  const durationMatch = html.match(/<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-  details.duration = durationMatch ? durationMatch[1].trim() : 'N/A';
+    details.push({
+        description: description,
+        alias: alias,
+        airdate: airdate
+    });
 
-  // الأنواع
-  const genres = [];
-  const genreBlock = html.match(/<span>\s*النوع\s*:\s*<\/span>(.*?)<\/li>/s);
-  if (genreBlock) {
-    const genreMatches = [...genreBlock[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)];
-    for (const m of genreMatches) {
-      genres.push(decodeHTMLEntities(m[1].trim()));
-    }
-  }
-  details.genres = genres;
-
-  // الجودة
-  const qualityMatch = html.match(/<span>\s*الجودة\s*:\s*<\/span>(.*?)<\/li>/s);
-  details.quality = qualityMatch
-    ? [...qualityMatch[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => m[1].trim())
-    : [];
-
-  // الصورة المصغرة من caption
-  const imageMatch = html.match(/\[caption[^\]]*\]<img[^>]+src="([^"]+)"/);
-  details.thumbnail = imageMatch ? imageMatch[1].trim() : '';
-
-  // رابط السلسلة إن وُجد
-  const seriesMatch = html.match(/<span itemprop="title">([^<]+)<\/span><\/a><\/span>/);
-  details.seriesTitle = seriesMatch ? decodeHTMLEntities(seriesMatch[1].trim()) : '';
-
-  return details;
+    console.log(details);
+    return details;
 }
 
 function extractEpisodes(html) {
@@ -107,155 +71,26 @@ function extractEpisodes(html) {
     return episodes;
 }
 
-// ✅ دالة استخراج رابط المشاهدة (stream)
 async function extractStreamUrl(html) {
-  if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
+    if (!_0xCheck()) return 'https://files.catbox.moe/avolvc.mp4';
 
-  const multiStreams = { streams: [], subtitles: null };
+    const serverMatch = html.match(/<li[^>]+data-watch="([^"]+mp4upload\.com[^"]+)"/);
+    const embedUrl = serverMatch ? serverMatch[1].trim() : 'N/A';
 
-  const serverMatches = [...html.matchAll(/<li[^>]+data-watch="([^"]+)"/g)];
-  if (!serverMatches || serverMatches.length === 0) return JSON.stringify(multiStreams);
+    let streamUrl = "";
 
-  const priority = ['vidmoly', 'uqload', 'mp4upload', 'sibnet', 'sendvid', 'listeamed', 'playerwish'];
-
-  const sortedMatches = serverMatches.sort((a, b) => {
-    const aIndex = priority.findIndex(s => a[1].includes(s));
-    const bIndex = priority.findIndex(s => b[1].includes(s));
-    return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-  });
-
-  for (const match of sortedMatches) {
-    const embedUrl = match[1].trim();
-    let sources = [];
-
-    if (embedUrl.includes('vidmoly')) {
-      sources = await extractVidmoly(embedUrl);
-    } else if (embedUrl.includes('uqload')) {
-      sources = await extractUqload(embedUrl);
-    } else if (embedUrl.includes('mp4upload')) {
-      sources = await extractMp4upload(embedUrl);
-    } else {
-      try {
-        const response = await soraFetch(embedUrl, {
-          headers: {
-            'Referer': embedUrl,
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
-          }
-        });
-        const embedHtml = await response.text();
-
-        const mp4Match = embedHtml.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
-          || embedHtml.match(/sources:\s*\[\s*\{file:\s*['"]([^'"]+)['"]\s*,\s*type:\s*['"]video\/mp4['"]/i)
-          || embedHtml.match(/file:\s*['"]([^'"]+\.mp4)['"]/i);
-
-        if (mp4Match) {
-          sources = [{
-            url: mp4Match[1].trim(),
-            quality: 'Unknown',
-            headers: {
-              "Referer": embedUrl,
-              "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-            }
-          }];
+    if (embedUrl !== 'N/A') {
+        const response = await soraFetch(embedUrl);
+        const fetchedHtml = await response.text();
+        
+        const streamMatch = fetchedHtml.match(/player\.src\(\{\s*type:\s*["']video\/mp4["'],\s*src:\s*["']([^"']+)["']\s*\}\)/i);
+        if (streamMatch) {
+            streamUrl = streamMatch[1].trim();
         }
-      } catch (e) {}
     }
 
-    let baseName = '';
-    if (embedUrl.includes('vidmoly')) baseName = 'Vidmoly';
-    else if (embedUrl.includes('uqload')) baseName = 'Uqload';
-    else if (embedUrl.includes('mp4upload')) baseName = 'Mp4Upload';
-    else if (embedUrl.includes('sibnet')) baseName = 'Sibnet';
-    else if (embedUrl.includes('sendvid')) baseName = 'Sendvid';
-    else if (embedUrl.includes('listeamed')) baseName = 'Listeamed';
-    else if (embedUrl.includes('playerwish')) baseName = 'Playerwish';
-    else baseName = 'Server';
-
-    if (sources.length === 0) {
-      multiStreams.streams.push({
-        title: `❌ ${baseName} (No Stream)`,
-        streamUrl: null,
-        headers: {
-          "Referer": embedUrl,
-          "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-        },
-        subtitles: null
-      });
-      continue;
-    }
-
-    for (const stream of sources) {
-      multiStreams.streams.push({
-        title: `✅ ${baseName} (${stream.quality})`,
-        streamUrl: stream.url,
-        headers: stream.headers,
-        subtitles: null
-      });
-    }
-  }
-
-  return JSON.stringify(multiStreams);
-}
-
-async function extractVidmoly(url) {
-  const res = await soraFetch(url, {
-    headers: {
-      'Referer': url,
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
-    }
-  });
-  const html = await res.text();
-  const match = html.match(/sources:\s*\[\s*\{\s*file:\s*["']([^"']+)["'].*?label:\s*["']([^"']+)["']/);
-  if (!match) return [];
-  return [{
-    url: match[1],
-    quality: match[2],
-    headers: {
-      Referer: url,
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-    }
-  }];
-}
-
-async function extractUqload(url) {
-  const res = await soraFetch(url, {
-    headers: {
-      'Referer': url,
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
-    }
-  });
-  const html = await res.text();
-  const match = html.match(/sources:\s*\[\s*\{\s*file:\s*["']([^"']+\.mp4)["']/);
-  if (!match) return [];
-  return [{
-    url: match[1],
-    quality: 'SD',
-    headers: {
-      Referer: url,
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-    }
-  }];
-}
-
-async function extractMp4upload(url) {
-  const res = await soraFetch(url, {
-    headers: {
-      'Referer': url,
-      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)'
-    }
-  });
-  const html = await res.text();
-  const match = html.match(/player\.src\(\{\s*type:\s*['"]video\/mp4['"],\s*src:\s*['"]([^'"]+)['"]\s*\}\)/i)
-    || html.match(/file:\s*['"]([^'"]+\.mp4)['"]/i);
-  if (!match) return [];
-  return [{
-    url: match[1],
-    quality: 'SD',
-    headers: {
-      Referer: url,
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
-    }
-  }];
+    console.log(streamUrl);
+    return streamUrl;
 }
 
 function decodeHTMLEntities(text) {
