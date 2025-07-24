@@ -230,11 +230,41 @@ async function extractSibnet(embedUrl) {
 }
 
 async function extractSendvid(embedUrl) {
-    const res = await soraFetch(embedUrl, { headers: { Referer: embedUrl } });
+    const res = await soraFetch(embedUrl, {
+        headers: {
+            Referer: embedUrl,
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+        }
+    });
     const html = await res.text();
-    const m = html.match(/"src":"([^"]+\.mp4)"/);
-    if (!m) return [];
-    return [{ url: m[1].replace(/\\/g, ''), quality: 'Auto' }];
+
+    // نحاول نلقط من <meta property="og:video">
+    const metaMatch = html.match(/<meta\s+property=["']og:video["']\s+content=["']([^"']+\.mp4[^"']*)["']/i);
+    if (metaMatch) {
+        return [{
+            url: metaMatch[1],
+            quality: 'Auto',
+            headers: {
+                Referer: embedUrl,
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+            }
+        }];
+    }
+
+    // fallback: نحاول نلقط من <source src=...>
+    const sourceMatch = html.match(/<source\s+src=["']([^"']+\.mp4[^"']*)["']/i);
+    if (sourceMatch) {
+        return [{
+            url: sourceMatch[1],
+            quality: 'Auto',
+            headers: {
+                Referer: embedUrl,
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
+            }
+        }];
+    }
+
+    return [];
 }
 
 async function extractListeamed(embedUrl) {
