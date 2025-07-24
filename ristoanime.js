@@ -214,13 +214,14 @@ async function extractSibnet(embedUrl) {
     });
     const html = await res.text();
 
-    // match .m3u8 HLS stream (Sibnet uses application/x-mpegURL not .mp4)
     const match = html.match(/src:\s*["']([^"']+\.m3u8)["']/);
     if (!match) return [];
 
     return [{
-        url: match[1].startsWith("http") ? match[1] : `https://video.sibnet.ru${match[1]}`,
-        quality: 'Auto',
+        title: "Auto",
+        streamUrl: match[1].startsWith("http") ? match[1] : `https://video.sibnet.ru${match[1]}`,
+        quality: "Auto",
+        type: "hls",
         headers: {
             Referer: embedUrl,
             "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X)"
