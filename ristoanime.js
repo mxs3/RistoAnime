@@ -36,44 +36,36 @@ function decodeHTMLEntities(text) {
     .replace(/&gt;/g, '>');
 }
 
+//==== Made by xibrox ====
 async function extractDetails(url) {
     try {
         const response = await soraFetch(url);
         const html = await response.text();
 
-        // الوصف
-        const descriptionMatch = html.match(/<div class=["']StoryArea["'][^>]*>[\s\S]*?<p>(.*?)<\/p>/i);
-        const description = descriptionMatch && descriptionMatch[1] ? descriptionMatch[1].trim() : 'لا يوجد وصف متاح.';
+        const descriptionMatch = html.match(/<div class="StoryArea">[\s\S]*?<p>(.*?)<\/p>/);
+        const description = descriptionMatch ? descriptionMatch[1].trim() : 'No description available';
 
-        // النوع (Genre) – نلتقط أول مجموعة <a> بعد "النوع"
-        let genres = 'غير محدد';
-        const genreSpanMatch = html.match(/<span>\s*النوع\s*:\s*<\/span>\s*([\s\S]*?)<\/li>/i);
-        if (genreSpanMatch && genreSpanMatch[1]) {
-            const genreLinks = [...genreSpanMatch[1].matchAll(/<a[^>]*>(.*?)<\/a>/gi)];
-            if (genreLinks.length) {
-                genres = genreLinks.map(g => g[1].trim()).join(', ');
-            }
-        }
+        const aliasesMatch = html.match(/<h1 class="PostTitle">[\s\S]*?<a[^>]*>(.*?)<\/a>/);
+        const aliases = aliasesMatch ? aliasesMatch[1].trim() : 'No aliases available';
 
-        // سنة العرض
-        const airdateMatch = html.match(/<span>\s*عرض من\s*:\s*<\/span>\s*<a[^>]*>(\d{4})/i);
-        const airdate = airdateMatch && airdateMatch[1] ? airdateMatch[1].trim() : 'غير معروف';
+        const airdateMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-calendar"><\/i>\s*<\/div>\s*<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>\s*(\d{4})\s*<\/a>/);
+        const airdate = airdateMatch ? `Aired: ${airdateMatch[1].trim()}` : 'Aired: Unknown';
 
-        return [{
+        const transformedResults = [{
             description,
-            genres,
+            aliases,
             airdate
         }];
 
+        return JSON.stringify(transformedResults);
     } catch (error) {
         console.log('Details error:', error);
-        return [{
-            description: 'حدث خطأ أثناء تحميل الوصف',
-            genres: 'غير محدد',
-            airdate: 'غير معروف'
-        }];
+        return JSON.stringify([{
+            description: 'Error loading description',
+            aliases: 'No aliases available',
+            airdate: 'Aired: Unknown'
+        }]);
     }
-}
 
 function extractEpisodes(html) {
     const episodes = [];
