@@ -41,21 +41,24 @@ async function extractDetails(url) {
         const response = await soraFetch(url);
         const html = await response.text();
 
-        // وصف الأنمي
-        const descriptionMatch = html.match(/<div\s+class=["']StoryArea["'][^>]*>[\s\S]*?<p>(.*?)<\/p>/i);
+        // الوصف
+        const descriptionMatch = html.match(/<div class=["']StoryArea["'][^>]*>[\s\S]*?<p>(.*?)<\/p>/i);
         const description = descriptionMatch ? descriptionMatch[1].trim() : 'لا يوجد وصف متاح.';
 
-        // الاسماء أو الألقاب
-        const aliasesMatch = html.match(/<h1\s+class=["']PostTitle["'][^>]*>[\s\S]*?<a[^>]*>(.*?)<\/a>/i);
-        const aliases = aliasesMatch ? aliasesMatch[1].trim() : 'غير مصنف';
+        // النوع (Genre)
+        const genreMatches = [...html.matchAll(/<span>\s*النوع\s*:\s*<\/span>\s*((?:<a[^>]*>.*?<\/a>\s*)+)/i)];
+        let genres = 'غير محدد';
+        if (genreMatches.length) {
+            genres = genreMatches[0][1].replace(/<a[^>]*>|<\/a>/gi, '').trim().split(/\s+/).join(', ');
+        }
 
         // سنة العرض
-        const airdateMatch = html.match(/<li>\s*<div\s+class=["']icon["'][^>]*>[\s\S]*?<i[^>]*><\/i>[\s\S]*?تاريخ\s+الاصدار\s*:\s*<\/span>\s*<a[^>]*>\s*(\d{4})/i);
+        const airdateMatch = html.match(/<span>\s*عرض من\s*:\s*<\/span>\s*<a[^>]*>(\d{4})/i);
         const airdate = airdateMatch ? airdateMatch[1].trim() : 'غير معروف';
 
         return [{
             description,
-            aliases,
+            genres,
             airdate
         }];
 
@@ -63,7 +66,7 @@ async function extractDetails(url) {
         console.log('Details error:', error);
         return [{
             description: 'حدث خطأ أثناء تحميل الوصف',
-            aliases: 'غير مصنف',
+            genres: 'غير محدد',
             airdate: 'غير معروف'
         }];
     }
