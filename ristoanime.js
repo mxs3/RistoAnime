@@ -43,18 +43,21 @@ async function extractDetails(url) {
 
         // الوصف
         const descriptionMatch = html.match(/<div class=["']StoryArea["'][^>]*>[\s\S]*?<p>(.*?)<\/p>/i);
-        const description = descriptionMatch ? descriptionMatch[1].trim() : 'لا يوجد وصف متاح.';
+        const description = descriptionMatch && descriptionMatch[1] ? descriptionMatch[1].trim() : 'لا يوجد وصف متاح.';
 
-        // النوع (Genre)
-        const genreMatches = [...html.matchAll(/<span>\s*النوع\s*:\s*<\/span>\s*((?:<a[^>]*>.*?<\/a>\s*)+)/i)];
+        // النوع (Genre) – نلتقط أول مجموعة <a> بعد "النوع"
         let genres = 'غير محدد';
-        if (genreMatches.length) {
-            genres = genreMatches[0][1].replace(/<a[^>]*>|<\/a>/gi, '').trim().split(/\s+/).join(', ');
+        const genreSpanMatch = html.match(/<span>\s*النوع\s*:\s*<\/span>\s*([\s\S]*?)<\/li>/i);
+        if (genreSpanMatch && genreSpanMatch[1]) {
+            const genreLinks = [...genreSpanMatch[1].matchAll(/<a[^>]*>(.*?)<\/a>/gi)];
+            if (genreLinks.length) {
+                genres = genreLinks.map(g => g[1].trim()).join(', ');
+            }
         }
 
         // سنة العرض
         const airdateMatch = html.match(/<span>\s*عرض من\s*:\s*<\/span>\s*<a[^>]*>(\d{4})/i);
-        const airdate = airdateMatch ? airdateMatch[1].trim() : 'غير معروف';
+        const airdate = airdateMatch && airdateMatch[1] ? airdateMatch[1].trim() : 'غير معروف';
 
         return [{
             description,
