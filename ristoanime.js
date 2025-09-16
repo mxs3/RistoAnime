@@ -36,51 +36,35 @@ function decodeHTMLEntities(text) {
     .replace(/&gt;/g, '>');
 }
 
-function extractDetails(html) {
-  const details = {};
+async function extractDetails(url) {
+    try {
+        const response = await soraFetch(url);
+        const html = await response.text();
 
-  // الوصف
-  const descMatch = html.match(/<div class="StoryArea">\s*<span>.*?<\/span>\s*<p>(.*?)<\/p>/s);
-  details.description = descMatch ? decodeHTMLEntities(descMatch[1].trim()) : 'N/A';
+        const descriptionMatch = html.match(/<div class="StoryArea">[\s\S]*?<p>(.*?)<\/p>/);
+        const description = descriptionMatch ? descriptionMatch[1].trim() : 'No description available';
 
-  // العنوان الإنجليزي – إذا كان موجودًا
-  const englishTitleMatch = html.match(/<span>\s*العنوان الانجليزي\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-  details.englishTitle = englishTitleMatch ? decodeHTMLEntities(englishTitleMatch[1].trim()) : 'N/A';
+        const aliasesMatch = html.match(/<h1 class="PostTitle">[\s\S]*?<a[^>]*>(.*?)<\/a>/);
+        const aliases = aliasesMatch ? aliasesMatch[1].trim() : 'No aliases available';
 
-  // تاريخ العرض
-  const airedDateMatch = html.match(/<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-  details.airedDate = airedDateMatch ? airedDateMatch[1].trim() : 'N/A';
+        const airdateMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-calendar"><\/i>\s*<\/div>\s*<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>\s*(\d{4})\s*<\/a>/);
+        const airdate = airdateMatch ? `Aired: ${airdateMatch[1].trim()}` : 'Aired: Unknown';
 
-  // المدة
-  const durationMatch = html.match(/<span>\s*مدة العرض\s*:\s*<\/span>\s*<a[^>]*>([^<]+)<\/a>/);
-  details.duration = durationMatch ? durationMatch[1].trim() : 'N/A';
+        const transformedResults = [{
+            description,
+            aliases,
+            airdate
+        }];
 
-  // الأنواع
-  const genres = [];
-  const genreBlock = html.match(/<span>\s*النوع\s*:\s*<\/span>(.*?)<\/li>/s);
-  if (genreBlock) {
-    const genreMatches = [...genreBlock[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)];
-    for (const m of genreMatches) {
-      genres.push(decodeHTMLEntities(m[1].trim()));
+        return JSON.stringify(transformedResults);
+    } catch (error) {
+        console.log('Details error:', error);
+        return JSON.stringify([{
+            description: 'Error loading description',
+            aliases: 'No aliases available',
+            airdate: 'Aired: Unknown'
+        }]);
     }
-  }
-  details.genres = genres;
-
-  // الجودة
-  const qualityMatch = html.match(/<span>\s*الجودة\s*:\s*<\/span>(.*?)<\/li>/s);
-  details.quality = qualityMatch
-    ? [...qualityMatch[1].matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map(m => m[1].trim())
-    : [];
-
-  // الصورة المصغرة من caption
-  const imageMatch = html.match(/\[caption[^\]]*\]<img[^>]+src="([^"]+)"/);
-  details.thumbnail = imageMatch ? imageMatch[1].trim() : '';
-
-  // رابط السلسلة إن وُجد
-  const seriesMatch = html.match(/<span itemprop="title">([^<]+)<\/span><\/a><\/span>/);
-  details.seriesTitle = seriesMatch ? decodeHTMLEntities(seriesMatch[1].trim()) : '';
-
-  return details;
 }
 
 function extractEpisodes(html) {
