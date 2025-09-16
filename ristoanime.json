@@ -15,5 +15,6 @@
     "searchBaseUrl": "https://ristoanime.org/?s=%s",
     "scriptUrl": "https://raw.githubusercontent.com/mxs3/RistoAnime/refs/heads/main/ristoanime.js",
     "type": "anime",
-    "streamAsyncJS": true
+    "asyncJS": true,
+    "asyncStream": true
 }
