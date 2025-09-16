@@ -36,35 +36,48 @@ function decodeHTMLEntities(text) {
     .replace(/&gt;/g, '>');
 }
 
-async function extractDetails(url) {
-    try {
-        const response = await soraFetch(url);
-        const html = await response.text();
+function extractDetails(html) {
+  const stripTags = s => s.replace(/<[^>]+>/g, '').trim();
 
-        const descriptionMatch = html.match(/<div class="StoryArea">[\s\S]*?<p>(.*?)<\/p>/);
-        const description = descriptionMatch ? descriptionMatch[1].trim() : 'No description available';
+  const details = {
+    description: 'N/A',
+    airedDate: 'N/A',
+    genres: ['N/A']
+  };
 
-        const aliasesMatch = html.match(/<h1 class="PostTitle">[\s\S]*?<a[^>]*>(.*?)<\/a>/);
-        const aliases = aliasesMatch ? aliasesMatch[1].trim() : 'No aliases available';
-
-        const airdateMatch = html.match(/<li>\s*<div class="icon">\s*<i class="far fa-calendar"><\/i>\s*<\/div>\s*<span>\s*تاريخ الاصدار\s*:\s*<\/span>\s*<a[^>]*>\s*(\d{4})\s*<\/a>/);
-        const airdate = airdateMatch ? `Aired: ${airdateMatch[1].trim()}` : 'Aired: Unknown';
-
-        const transformedResults = [{
-            description,
-            aliases,
-            airdate
-        }];
-
-        return JSON.stringify(transformedResults);
-    } catch (error) {
-        console.log('Details error:', error);
-        return JSON.stringify([{
-            description: 'Error loading description',
-            aliases: 'No aliases available',
-            airdate: 'Aired: Unknown'
-        }]);
+  try {
+    // الوصف
+    let descMatch = html.match(/<div[^>]*class=["']?StoryArea["']?[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i);
+    if (descMatch && descMatch[1]) {
+      details.description = stripTags(descMatch[1]);
+    } else {
+      const firstP = html.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+      if (firstP && firstP[1]) details.description = stripTags(firstP[1]);
     }
+
+    // الأنواع
+    const genreBlock = html.match(/<span>\s*النوع\s*[:：]?\s*<\/span>([\s\S]*?)<\/li>/i);
+    if (genreBlock && genreBlock[1]) {
+      const found = [...genreBlock[1].matchAll(/<a[^>]*>([\s\S]*?)<\/a>/gi)]
+        .map(m => stripTags(m[1]))
+        .filter(Boolean);
+      if (found.length) details.genres = found;
+    }
+
+    // تاريخ العرض
+    let airedMatch = html.match(/<span>\s*(?:عرض من|تاريخ الاصدار)\s*[:：]?\s*<\/span>\s*<a[^>]*>([\s\S]*?)<\/a>/i);
+    if (airedMatch && airedMatch[1]) {
+      details.airedDate = stripTags(airedMatch[1]);
+    } else {
+      const yearMatch = html.match(/\b(19|20)\d{2}\b/);
+      if (yearMatch) details.airedDate = yearMatch[0];
+    }
+
+  } catch (e) {
+    console.log('extractDetails error:', e);
+  }
+
+  return details;
 }
 
 function extractEpisodes(html) {
