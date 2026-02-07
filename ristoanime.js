@@ -81,27 +81,58 @@ function extractDetails(html) {
 }
 
 function extractEpisodes(html) {
-    const episodes = [];
+  const episodes = [];
 
-    const episodeRegex = /<a href="([^"]+)">\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/g;
-    let match;
+  const episodeRegex = /<a\s+href="([^"]+)"[^>]*>\s*الحلقة\s*<em>(\d+)<\/em>\s*<\/a>/gi;
+  let match;
 
-    while ((match = episodeRegex.exec(html)) !== null) {
-        const href = match[1].trim() + "/watch/";
-        const number = match[2].trim();
+  while ((match = episodeRegex.exec(html)) !== null) {
+    const href = match[1].trim() + "/watch/";
+    const number = match[2].trim();
 
-        episodes.push({
-            href: href,
-            number: number
-        });
-    }
+    episodes.push({ href, number });
+  }
 
-    if (episodes.length > 0 && episodes[0].number !== "1") {
-        episodes.reverse();
-    }
-
-    console.log(episodes);
+  // لو الصفحة نفسها فيها حلقات — نرجعها زي ما هي
+  if (episodes.length > 0) {
+    if (episodes[0].number !== "1") episodes.reverse();
     return episodes;
+  }
+
+  // =============================
+  // دعم المواسم القديمة (season=xxxx&post_id=yyyy)
+  // =============================
+  const seasonMatches = [...html.matchAll(/season=\d+&post_id=\d+/gi)].map(m => m[0]);
+  if (!seasonMatches.length || typeof fetchv2 !== "function") return episodes;
+
+  const seen = new Set();
+
+  for (const q of seasonMatches) {
+    const url = location?.href
+      ? (location.href.includes('?') ? location.href + '&' + q : location.href + '?' + q)
+      : null;
+
+    if (!url) continue;
+
+    try {
+      const res = await fetchv2(url);
+      const seasonHtml = await res.text();
+
+      let m;
+      while ((m = episodeRegex.exec(seasonHtml)) !== null) {
+        const href = m[1].trim() + "/watch/";
+        const number = m[2].trim();
+        const key = href + number;
+        if (!seen.has(key)) {
+          seen.add(key);
+          episodes.push({ href, number });
+        }
+      }
+      episodeRegex.lastIndex = 0;
+    } catch (e) {}
+  }
+
+  return episodes.sort((a, b) => +a.number - +b.number);
 }
 
 // ✅ دالة استخراج رابط المشاهدة (stream)
