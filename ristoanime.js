@@ -37,7 +37,7 @@ function decodeHTMLEntities(text) {
 }
 
 function extractDetails(html) {
-  const stripTags = s => s.replace(/<[^>]+>/g, '').trim();
+  const stripTags = s => s.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 
   const details = {
     description: 'N/A',
@@ -46,31 +46,43 @@ function extractDetails(html) {
   };
 
   try {
+    // =====================
     // الوصف
-    let descMatch = html.match(/<div[^>]*class=["']?StoryArea["']?[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i);
-    if (descMatch && descMatch[1]) {
-      details.description = stripTags(descMatch[1]);
-    } else {
-      const firstP = html.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
-      if (firstP && firstP[1]) details.description = stripTags(firstP[1]);
+    // =====================
+    let descMatch =
+      html.match(/<div[^>]*class=["']?StoryArea["']?[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i) ||
+      html.match(/<div[^>]*class=["']?(story|desc|description|content)["']?[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i) ||
+      html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i) ||
+      html.match(/<p[^>]*>([^<]{40,})<\/p>/i);
+
+    if (descMatch) {
+      details.description = stripTags(descMatch[2] || descMatch[1]);
     }
 
+    // =====================
     // الأنواع
-    const genreBlock = html.match(/<span>\s*النوع\s*[:：]?\s*<\/span>([\s\S]*?)<\/li>/i);
-    if (genreBlock && genreBlock[1]) {
-      const found = [...genreBlock[1].matchAll(/<a[^>]*>([\s\S]*?)<\/a>/gi)]
+    // =====================
+    let genreBlock =
+      html.match(/<span[^>]*>\s*النوع\s*[:：]?\s*<\/span>([\s\S]*?)<\/li>/i) ||
+      html.match(/<div[^>]*class=["']?(genres?|tags?)["']?[\s\S]*?>([\s\S]*?)<\/div>/i);
+
+    if (genreBlock) {
+      const found = [...(genreBlock[2] || genreBlock[1]).matchAll(/<a[^>]*>([\s\S]*?)<\/a>/gi)]
         .map(m => stripTags(m[1]))
         .filter(Boolean);
+
       if (found.length) details.genres = found;
     }
 
+    // =====================
     // تاريخ العرض
-    let airedMatch = html.match(/<span>\s*(?:عرض من|تاريخ الاصدار)\s*[:：]?\s*<\/span>\s*<a[^>]*>([\s\S]*?)<\/a>/i);
-    if (airedMatch && airedMatch[1]) {
-      details.airedDate = stripTags(airedMatch[1]);
-    } else {
-      const yearMatch = html.match(/\b(19|20)\d{2}\b/);
-      if (yearMatch) details.airedDate = yearMatch[0];
+    // =====================
+    let airedMatch =
+      html.match(/<span[^>]*>\s*(?:عرض من|تاريخ الاصدار|سنة الانتاج|تاريخ العرض)\s*[:：]?\s*<\/span>\s*(?:<a[^>]*>)?([\s\S]*?)(?:<\/a>)?\s*</i) ||
+      html.match(/\b(19|20)\d{2}\b/);
+
+    if (airedMatch) {
+      details.airedDate = stripTags(airedMatch[1] || airedMatch[0]);
     }
 
   } catch (e) {
@@ -89,50 +101,27 @@ function extractEpisodes(html) {
   while ((match = episodeRegex.exec(html)) !== null) {
     const href = match[1].trim() + "/watch/";
     const number = match[2].trim();
-
     episodes.push({ href, number });
   }
 
-  // لو الصفحة نفسها فيها حلقات — نرجعها زي ما هي
-  if (episodes.length > 0) {
+  // لو الصفحة فيها حلقات مباشرة — نرجعها زي ما هي
+  if (episodes.length) {
     if (episodes[0].number !== "1") episodes.reverse();
     return episodes;
   }
 
   // =============================
-  // دعم المواسم القديمة (season=xxxx&post_id=yyyy)
+  // 🔥 دعم المواسم القديمة عبر season=xxxx&post_id=yyyy
   // =============================
-  const seasonMatches = [...html.matchAll(/season=\d+&post_id=\d+/gi)].map(m => m[0]);
-  if (!seasonMatches.length || typeof fetchv2 !== "function") return episodes;
+  const seasons = [...new Set(
+    [...html.matchAll(/season=(\d+)&post_id=(\d+)/gi)]
+      .map(m => ({
+        href: `?season=${m[1]}&post_id=${m[2]}`,
+        number: `S${m[1]}`
+      }))
+  )];
 
-  const seen = new Set();
-
-  for (const q of seasonMatches) {
-    const url = location?.href
-      ? (location.href.includes('?') ? location.href + '&' + q : location.href + '?' + q)
-      : null;
-
-    if (!url) continue;
-
-    try {
-      const res = await fetchv2(url);
-      const seasonHtml = await res.text();
-
-      let m;
-      while ((m = episodeRegex.exec(seasonHtml)) !== null) {
-        const href = m[1].trim() + "/watch/";
-        const number = m[2].trim();
-        const key = href + number;
-        if (!seen.has(key)) {
-          seen.add(key);
-          episodes.push({ href, number });
-        }
-      }
-      episodeRegex.lastIndex = 0;
-    } catch (e) {}
-  }
-
-  return episodes.sort((a, b) => +a.number - +b.number);
+  return seasons;
 }
 
 // ✅ دالة استخراج رابط المشاهدة (stream)
