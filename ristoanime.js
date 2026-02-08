@@ -46,44 +46,22 @@ function extractDetails(html) {
   };
 
   try {
-    // =====================
-    // الوصف
-    // =====================
-    let descMatch =
-      html.match(/<div[^>]*class=["']?StoryArea["']?[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i) ||
-      html.match(/<div[^>]*class=["']?(story|desc|description|content)["']?[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i) ||
+    // 🔥 الوصف من أي صفحة موسم
+    let desc =
       html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i) ||
-      html.match(/<p[^>]*>([^<]{40,})<\/p>/i);
+      html.match(/<p[^>]*>([^<]{50,})<\/p>/i);
 
-    if (descMatch) {
-      details.description = stripTags(descMatch[2] || descMatch[1]);
+    if (desc) details.description = stripTags(desc[1]);
+
+    // 🔥 الأنواع من أي tags أو روابط تصنيف
+    const genreMatches = [...html.matchAll(/<a[^>]+href="[^"]*(genre|tag)[^"]*"[^>]*>([^<]+)<\/a>/gi)];
+    if (genreMatches.length) {
+      details.genres = genreMatches.map(m => stripTags(m[2]));
     }
 
-    // =====================
-    // الأنواع
-    // =====================
-    let genreBlock =
-      html.match(/<span[^>]*>\s*النوع\s*[:：]?\s*<\/span>([\s\S]*?)<\/li>/i) ||
-      html.match(/<div[^>]*class=["']?(genres?|tags?)["']?[\s\S]*?>([\s\S]*?)<\/div>/i);
-
-    if (genreBlock) {
-      const found = [...(genreBlock[2] || genreBlock[1]).matchAll(/<a[^>]*>([\s\S]*?)<\/a>/gi)]
-        .map(m => stripTags(m[1]))
-        .filter(Boolean);
-
-      if (found.length) details.genres = found;
-    }
-
-    // =====================
-    // تاريخ العرض
-    // =====================
-    let airedMatch =
-      html.match(/<span[^>]*>\s*(?:عرض من|تاريخ الاصدار|سنة الانتاج|تاريخ العرض)\s*[:：]?\s*<\/span>\s*(?:<a[^>]*>)?([\s\S]*?)(?:<\/a>)?\s*</i) ||
-      html.match(/\b(19|20)\d{2}\b/);
-
-    if (airedMatch) {
-      details.airedDate = stripTags(airedMatch[1] || airedMatch[0]);
-    }
+    // 🔥 تاريخ العرض
+    const year = html.match(/\b(19|20)\d{2}\b/);
+    if (year) details.airedDate = year[0];
 
   } catch (e) {
     console.log('extractDetails error:', e);
@@ -99,29 +77,32 @@ function extractEpisodes(html) {
   let match;
 
   while ((match = episodeRegex.exec(html)) !== null) {
-    const href = match[1].trim() + "/watch/";
-    const number = match[2].trim();
-    episodes.push({ href, number });
+    episodes.push({
+      href: match[1].trim() + "/watch/",
+      number: match[2].trim()
+    });
   }
 
-  // لو الصفحة فيها حلقات مباشرة — نرجعها زي ما هي
   if (episodes.length) {
     if (episodes[0].number !== "1") episodes.reverse();
     return episodes;
   }
 
   // =============================
-  // 🔥 دعم المواسم القديمة عبر season=xxxx&post_id=yyyy
+  // 🔥 استخراج روابط المواسم نفسها
   // =============================
   const seasons = [...new Set(
-    [...html.matchAll(/season=(\d+)&post_id=(\d+)/gi)]
-      .map(m => ({
-        href: `?season=${m[1]}&post_id=${m[2]}`,
-        number: `S${m[1]}`
-      }))
+    [...html.matchAll(/season=\d+&post_id=\d+/gi)].map(m => m[0])
   )];
 
-  return seasons;
+  for (let i = 0; i < seasons.length; i++) {
+    episodes.push({
+      href: seasons[i],
+      number: `Season ${i + 1}`
+    });
+  }
+
+  return episodes;
 }
 
 // ✅ دالة استخراج رابط المشاهدة (stream)
